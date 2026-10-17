@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
     <exclude domain="sharedpref" path="relay_conversations.xml" />
+    <exclude domain="sharedpref" path="relay_rules.xml" />
+    <exclude domain="sharedpref" path="relay_onboarding.xml" />
+    <exclude domain="sharedpref" path="air_battery.xml" />
 </full-backup-content>

@@ -2,8 +2,14 @@
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="sharedpref" path="relay_conversations.xml" />
+        <exclude domain="sharedpref" path="relay_rules.xml" />
+        <exclude domain="sharedpref" path="relay_onboarding.xml" />
+        <exclude domain="sharedpref" path="air_battery.xml" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="sharedpref" path="relay_conversations.xml" />
+        <exclude domain="sharedpref" path="relay_rules.xml" />
+        <exclude domain="sharedpref" path="relay_onboarding.xml" />
+        <exclude domain="sharedpref" path="air_battery.xml" />
     </device-transfer>
 </data-extraction-rules>

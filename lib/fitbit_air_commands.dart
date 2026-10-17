@@ -26,7 +26,11 @@ class AirHapticCommand {
     required this.id,
     required this.expiresAt,
     this.kind = AirHapticKind.preview,
+    this.intensity,
   }) {
+    if (intensity != null && kind != AirHapticKind.tap) {
+      throw ArgumentError('An explicit intensity requires AirHapticKind.tap.');
+    }
     if (id.trim().isEmpty || id.length > 128) {
       throw ArgumentError.value(id, 'id', 'Must contain 1–128 characters.');
     }
@@ -35,6 +39,9 @@ class AirHapticCommand {
   final String id;
   final DateTime expiresAt;
   final AirHapticKind kind;
+
+  /// Optional persistent strength for a single tap; null keeps current strength.
+  final HapticIntensity? intensity;
 }
 
 enum AirHapticDispatchStatus {
@@ -163,7 +170,9 @@ class AirHapticDispatcher {
           } else {
             try {
               if (pending.command.kind == AirHapticKind.tap) {
-                final tap = await FitbitAir.tap();
+                final tap = await FitbitAir.tap(
+                  intensity: pending.command.intensity,
+                );
                 if (!tap.verified) {
                   throw const FitbitAirException(
                     'UNVERIFIED',

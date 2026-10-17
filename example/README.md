@@ -4,7 +4,9 @@ Air Relay is an independent companion example for Fitbit Air, with light and
 dark themes, an adaptive Android launcher icon and a status-first home screen.
 Original icon artwork is in [`assets/brand`](assets/brand).
 
-The app has **Relay**, **Device**, and **Lab** screens. Device and research
+The app has **Home**, **Rules**, and **Device** screens. Device → Developer tools
+opens **Lab** for experiments. Rules includes per-app and WhatsApp-chat vibration
+presets and daily quiet hours; Home offers timed pause. Device and research
 operations use the same named action controller as the integration-test harness.
 See the [demo and agent guide](../doc/demo.md) for stable controls, saved trial
 settings, sanitized reports, and the physical release checklist.

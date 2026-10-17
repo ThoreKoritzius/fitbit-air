@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:clock/clock.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:fitbit_air/fitbit_air_commands.dart';
+import 'package:fitbit_air/fitbit_air.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -26,6 +27,41 @@ void main() {
     });
   });
   tearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+  test(
+    'explicit strength reaches a tap and cannot be attached to other kinds',
+    () async {
+      expect(
+        () => AirHapticCommand(
+          id: 'bad',
+          expiresAt: clock.now().add(const Duration(minutes: 1)),
+          intensity: HapticIntensity.low,
+        ),
+        throwsArgumentError,
+      );
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        expect(call.method, 'tap');
+        expect(call.arguments, {'intensity': 2});
+        return {
+          'intensity': 2,
+          'previousIntensity': 3,
+          'changed': true,
+          'verified': true,
+        };
+      });
+      final dispatcher = AirHapticDispatcher();
+      final result = await dispatcher.submit(
+        AirHapticCommand(
+          id: 'low',
+          expiresAt: clock.now().add(const Duration(minutes: 1)),
+          kind: AirHapticKind.tap,
+          intensity: HapticIntensity.low,
+        ),
+      );
+      expect(result.status, AirHapticDispatchStatus.completed);
+      dispatcher.close();
+    },
+  );
 
   test('defaults to restoration preview and reports completion', () {
     fakeAsync((time) {
@@ -202,9 +238,7 @@ void main() {
         calls.add(call.method);
         return {'intensity': 2, 'verified': verified};
       });
-      final dispatcher = AirHapticDispatcher(
-        minimumInterval: Duration.zero,
-      );
+      final dispatcher = AirHapticDispatcher(minimumInterval: Duration.zero);
       final results = <AirHapticDispatchResult>[];
       AirHapticCommand tap(String id) => AirHapticCommand(
         id: id,

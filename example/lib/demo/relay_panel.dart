@@ -1,9 +1,11 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 
 import 'demo_controller.dart';
-import 'conversation_picker.dart';
+import 'rules_panel.dart';
+import 'relay_status.dart';
+import 'relay_toggle_button.dart';
+import 'air_status_strip.dart';
+import 'setup_page.dart';
 
 class RelayPanel extends StatelessWidget {
   const RelayPanel({
@@ -13,47 +15,32 @@ class RelayPanel extends StatelessWidget {
     required this.testVibration,
     required this.exportReport,
     this.testFeedback,
+    this.openRules,
+    this.scrollController,
   });
   final DemoController controller;
   final void Function(Future<void> Function()) perform;
   final VoidCallback testVibration;
   final VoidCallback exportReport;
+  final VoidCallback? openRules;
+  final ScrollController? scrollController;
 
   /// Inline Test state: null (idle), 'sending' or 'sent'.
   final String? testFeedback;
 
-  /// Routine outcomes the title already conveys; errors still show.
-  static bool _routine(String outcome) =>
-      outcome == 'Relay stopped.' ||
-      outcome == 'Relay is off.' ||
-      outcome.startsWith('Haptic ');
-
-  Widget _check(
-    String label,
-    bool? complete, {
-    VoidCallback? action,
-    String? actionLabel,
-    String? actionKey,
-  }) => ListTile(
-    dense: true,
-    contentPadding: EdgeInsets.zero,
-    leading: Icon(
-      complete == true
-          ? Icons.check_circle
-          : complete == false
-          ? Icons.error_outline
-          : Icons.help_outline,
-      color: complete == true ? Colors.green : null,
-    ),
-    title: Text(label),
-    trailing: action == null
-        ? null
-        : TextButton(
-            key: actionKey == null ? null : ValueKey(actionKey),
-            onPressed: action,
-            child: Text(actionLabel ?? 'Set up'),
-          ),
-  );
+  Future<void> _setup(
+    BuildContext context,
+    DemoController state, {
+    int initialStep = 0,
+  }) async {
+    final completedBefore = state.setupCompleted;
+    await showRelaySetup(context, state, initialStep: initialStep);
+    if (!completedBefore &&
+        state.setupCompleted &&
+        scrollController?.hasClients == true) {
+      scrollController!.jumpTo(0);
+    }
+  }
 
   /// Fixed-size so progress and confirmation never move the layout.
   Widget _testButton(BuildContext context, DemoController state) {
@@ -61,9 +48,16 @@ class RelayPanel extends StatelessWidget {
     final sent = testFeedback == 'sent';
     final enabled =
         testFeedback == null &&
+        state.bluetoothPermission &&
+        state.bluetoothEnabled == true &&
+        state.paired != false &&
         !state.busy &&
+        !state.previewing &&
         !state.changingRelay &&
+        !state.batteryReading &&
+        state.relayTransition == null &&
         !state.relayStopping &&
+        (!state.relayRunning || state.settings.silenceReason == null) &&
         (!state.relayRunning || state.relayReady);
     return Semantics(
       label: 'Test vibration',
@@ -102,364 +96,322 @@ class RelayPanel extends StatelessWidget {
     );
   }
 
+  void _recover(BuildContext context, RelayRecovery recovery) {
+    switch (recovery) {
+      case RelayRecovery.bluetooth:
+        perform(controller.openBluetoothSettings);
+      case RelayRecovery.notifications:
+        _setup(context, controller, initialStep: 1);
+      case RelayRecovery.rules:
+        openRules?.call();
+      case RelayRecovery.setup:
+        _setup(context, controller);
+      case RelayRecovery.none:
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = controller;
-    final apps = state.filteredApps;
+    final status = RelayStatus.fromController(state);
+    final colors = Theme.of(context).colorScheme;
+    final transition = state.relayTransition;
+    final transitioning = transition != null;
+    final displayedRunning =
+        transition == RelayTransition.stopping ||
+        (transition == null && state.relayRunning);
+    final needsSetup =
+        !state.setupCompleted && !displayedRunning && !transitioning;
+    final needsFix = status.recovery != RelayRecovery.none;
+    final paused = displayedRunning && state.settings.silenceReason == 'paused';
+    final title = needsSetup
+        ? 'Finish setup'
+        : transition == RelayTransition.starting
+        ? 'Notifications off'
+        : transition == RelayTransition.stopping
+        ? (paused
+              ? 'Paused'
+              : state.settings.silenceReason == 'quiet_hours'
+              ? 'Quiet hours'
+              : 'Notifications on')
+        : switch (status.title) {
+            'Ready for notifications' => 'Notifications on',
+            'Ready when you are' => 'Notifications off',
+            'Taking a break' => 'Paused',
+            _ => status.title,
+          };
+    final recent = state.history
+        .where(
+          (e) => !const {'detected', 'queued', 'merged'}.contains(e['stage']),
+        )
+        .take(3)
+        .toList();
+    final enabled =
+        state.initialized &&
+        !state.changingRelay &&
+        !state.batteryReading &&
+        !transitioning &&
+        !state.relayStopping &&
+        (state.relayRunning || !state.busy);
+    final recoveryLabel = switch (status.recovery) {
+      RelayRecovery.bluetooth => 'Turn on Bluetooth',
+      RelayRecovery.notifications => 'Review notification access',
+      RelayRecovery.rules => 'Choose apps',
+      _ => 'Check setup',
+    };
     return ListView(
       key: const ValueKey('relay-scroll'),
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+      controller: scrollController,
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
       children: [
-        Text(
-          'A little nudge.\nRight on your wrist.',
-          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-            letterSpacing: -.7,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Choose the notifications that reach your Fitbit Air.',
-          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(height: 24),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Icon(
-                        state.relayRunning
-                            ? Icons.notifications_active_outlined
-                            : Icons.notifications_paused_outlined,
-                        color: Theme.of(context).colorScheme.onPrimaryContainer,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        state.relayStopping
-                            ? 'Finishing up'
-                            : state.relayRunning
-                            ? 'Your relay is on'
-                            : 'Your relay is paused',
-                        key: const ValueKey('relay-status'),
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                if (state.relayRunning || !_routine(state.relayOutcome))
-                  Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    child: Semantics(
-                      liveRegion: true,
-                      child: Text(
-                        state.relayOutcome,
-                        key: const ValueKey('relay-outcome'),
-                      ),
-                    ),
-                  ),
-                if (state.setupError != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      state.setupError!,
-                      key: const ValueKey('relay-error'),
-                    ),
-                  ),
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  key: const ValueKey('relay-toggle'),
-                  onPressed:
-                      state.changingRelay ||
-                          state.relayStopping ||
-                          (!state.relayRunning &&
-                              (state.busy ||
-                                  state.selectedApps.isEmpty ||
-                                  !state.access ||
-                                  !state.listenerConnected ||
-                                  state.bluetoothEnabled == false))
-                      ? null
-                      : () => perform(
-                          state.relayRunning
-                              ? state.stopRelay
-                              : state.startRelay,
-                        ),
-                  icon: Icon(
-                    state.relayRunning ? Icons.stop : Icons.play_arrow,
-                  ),
-                  label: Text(
-                    state.relayRunning
-                        ? 'Stop notification relay'
-                        : 'Start notification relay',
-                  ),
-                ),
-                const Divider(height: 32),
-                Text(
-                  'Vibration',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                const SizedBox(height: 8),
-                SegmentedButton<String>(
-                  key: const ValueKey('pulse-style'),
-                  segments: const [
-                    ButtonSegment(
-                      value: 'single',
-                      label: Text('One pulse'),
-                      icon: Icon(Icons.touch_app),
-                    ),
-                    ButtonSegment(
-                      value: 'double',
-                      label: Text('Two pulses'),
-                      icon: Icon(Icons.vibration),
-                    ),
-                  ],
-                  selected: {state.pulseStyle},
-                  // Changing style mid-test only affects the next alert.
-                  onSelectionChanged: state.relayRunning || state.changingRelay
-                      ? null
-                      : (value) =>
-                            perform(() => state.setPulseStyle(value.single)),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        state.relayRunning
-                            ? 'Stop the relay to change this.'
-                            : state.pulseStyle == 'single'
-                            ? 'One pulse per alert at your strength.'
-                            : 'Two pulses per alert; strength restored.',
-                        key: const ValueKey('pulse-style-hint'),
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ),
-                    _testButton(context, state),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Card(
-          child: ExpansionTile(
-            key: ValueKey(
-              'relay-setup-${!state.access || !state.listenerConnected || state.bluetoothEnabled == false}',
-            ),
-            initiallyExpanded:
-                !state.access ||
-                !state.listenerConnected ||
-                state.bluetoothEnabled == false,
-            leading: Icon(
-              state.access &&
-                      state.listenerConnected &&
-                      state.bluetoothEnabled == true
-                  ? Icons.check_circle_outline
-                  : Icons.settings_outlined,
-            ),
-            title: const Text('Device & permissions'),
-            subtitle: Text(
-              state.access &&
-                      state.listenerConnected &&
-                      state.bluetoothEnabled == true
-                  ? 'Notification access connected · Bluetooth on'
-                  : 'Complete setup to relay notifications',
-            ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _check(
-                      'Notification access: ${state.access ? (state.listenerConnected ? "connected" : "connecting") : "not enabled"}',
-                      state.access && state.listenerConnected,
-                      action: () => perform(state.openAccessSettings),
-                      actionKey: 'notification-access-settings',
-                      actionLabel: 'Settings',
-                    ),
-                    _check(
-                      'Nearby devices permission',
-                      state.bluetoothPermission,
-                      action: state.controlsBlocked
-                          ? null
-                          : () => perform(state.checkPaired),
-                      actionLabel: 'Check',
-                    ),
-                    _check(
-                      'Bluetooth ${state.bluetoothEnabled == true
-                          ? "on"
-                          : state.bluetoothEnabled == false
-                          ? "off"
-                          : "not checked"}',
-                      state.bluetoothEnabled,
-                      action: () => perform(state.openBluetoothSettings),
-                      actionLabel: 'Settings',
-                    ),
-                    _check(
-                      state.paired == true
-                          ? 'Air paired in Google Health'
-                          : 'Air pairing ${state.paired == false ? "not found" : "not checked"}',
-                      state.paired,
-                      action: state.controlsBlocked
-                          ? null
-                          : () => perform(state.checkPaired),
-                      actionLabel: 'Check',
-                    ),
-                  ],
+              AnimatedContainer(
+                duration: MediaQuery.disableAnimationsOf(context)
+                    ? Duration.zero
+                    : const Duration(milliseconds: 180),
+                width: 88,
+                height: 88,
+                decoration: BoxDecoration(
+                  color: displayedRunning
+                      ? colors.primaryContainer.withValues(alpha: .6)
+                      : colors.surfaceContainerHighest,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  paused
+                      ? Icons.pause
+                      : needsFix && !needsSetup
+                      ? Icons.error_outline
+                      : Icons.watch_outlined,
+                  size: 40,
+                  color: displayedRunning
+                      ? colors.primary
+                      : colors.onSurfaceVariant,
                 ),
               ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        Card(
-          child: ExpansionTile(
-            key: const ValueKey('app-picker'),
-            leading: const Icon(Icons.apps_rounded),
-            title: const Text('Choose notification apps'),
-            subtitle: Text(
-              state.selectedApps.isEmpty
-                  ? 'Choose at least one app'
-                  : '${state.selectedApps.length} selected · ${state.selectedApps.map((package) => state.apps.where((app) => app['packageName'] == package).map((app) => app['label'] as String).firstOrNull ?? package.split('.').last).join(', ')}',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            childrenPadding: const EdgeInsets.all(12),
-            children: [
-              TextFormField(
-                key: const ValueKey('app-search'),
-                initialValue: state.appSearch,
-                decoration: const InputDecoration(
-                  labelText: 'Search apps',
-                  prefixIcon: Icon(Icons.search),
-                  border: OutlineInputBorder(),
+              const SizedBox(height: 20),
+              Text(
+                title,
+                key: const ValueKey('relay-status'),
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -.7,
                 ),
-                onChanged: state.searchApps,
               ),
               const SizedBox(height: 8),
-              if (state.selectedApps.isEmpty)
-                const Text('Select at least one app before starting.'),
-              if (state.relayRunning)
-                const Text('Stop the relay to change selected apps.'),
-              if (apps.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(12),
+              Text(
+                needsSetup
+                    ? 'Pick up where you left off.'
+                    : needsFix && !transitioning
+                    ? status.detail
+                    : state.selectedAppsSummary,
+                key: const ValueKey('relay-status-detail'),
+                textAlign: TextAlign.center,
+                style: TextStyle(color: colors.onSurfaceVariant),
+              ),
+              AirStatusStrip(controller: state),
+              if (paused)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
                   child: Text(
-                    'No matching apps. Try another search or refresh the list.',
-                  ),
-                )
-              else
-                SizedBox(
-                  height: 240,
-                  child: ListView.builder(
-                    key: const ValueKey('app-list'),
-                    itemCount: apps.length,
-                    itemBuilder: (context, index) {
-                      final app = apps[index];
-                      final packageName = app['packageName']! as String;
-                      final icon = app['icon'] as String?;
-                      return CheckboxListTile(
-                        key: ValueKey('app-$packageName'),
-                        secondary: icon == null
-                            ? const Icon(Icons.apps)
-                            : Image.memory(
-                                base64Decode(icon),
-                                width: 32,
-                                height: 32,
-                                gaplessPlayback: true,
-                              ),
-                        title: Text(app['label']! as String),
-                        value: state.selectedApps.contains(packageName),
-                        onChanged: state.relayRunning || state.changingRelay
-                            ? null
-                            : (value) => perform(
-                                () => state.selectApp(packageName, value!),
-                              ),
-                      );
-                    },
+                    state.settings.pauseUntil == -1
+                        ? 'Until you resume'
+                        : 'Until ${TimeOfDay.fromDateTime(DateTime.fromMillisecondsSinceEpoch(state.settings.pauseUntil)).format(context)}',
                   ),
                 ),
-              TextButton(
-                key: const ValueKey('refresh-apps'),
-                onPressed: () => perform(state.loadApps),
-                child: const Text('Refresh app list'),
-              ),
+              if (state.relayRunning &&
+                  state.settings.silenceReason == 'quiet_hours')
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Until ${formatMinute(context, state.settings.endMinute)}',
+                  ),
+                ),
             ],
           ),
         ),
-        const SizedBox(height: 12),
-        ConversationPicker(controller: state, perform: perform),
-        const SizedBox(height: 20),
-        Text(
-          'Early access · Google Health sync is still being tested. If sync stalls after a vibration, pause the relay.',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+        const SizedBox(height: 16),
+        if (needsSetup)
+          FilledButton(
+            key: const ValueKey('guided-setup'),
+            onPressed: enabled
+                ? () => _setup(context, state, initialStep: state.setupStep)
+                : null,
+            child: const Text('Continue setup'),
+          )
+        else if (needsFix && !state.relayRunning && !transitioning)
+          FilledButton(
+            key: ValueKey(
+              status.recovery == RelayRecovery.notifications
+                  ? 'notification-access-settings'
+                  : 'relay-recovery',
+            ),
+            onPressed: enabled
+                ? () => _recover(context, status.recovery)
+                : null,
+            child: Text(recoveryLabel),
+          )
+        else if (paused && !transitioning)
+          FilledButton.icon(
+            key: const ValueKey('resume-relay'),
+            onPressed: enabled ? () => perform(() => state.setPause(0)) : null,
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('Resume'),
+          )
+        else
+          RelayToggleButton(
+            running: displayedRunning,
+            transition: transition,
+            onPressed: enabled
+                ? () => perform(
+                    displayedRunning ? state.stopRelay : state.startRelay,
+                  )
+                : null,
           ),
-        ),
-        const SizedBox(height: 24),
-        Text('Recent activity', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 8),
-        if (state.history.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(16),
+        if (state.setupError != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
             child: Text(
-              'No relay activity yet. Start the relay and send a notification, or use Test vibration.',
+              state.setupError!,
+              key: const ValueKey('relay-error'),
+              style: TextStyle(color: colors.error),
             ),
           ),
-        for (final entry
-            in state.history
-                .where(
-                  (entry) =>
-                      entry['stage'] != 'detected' &&
-                      entry['stage'] != 'queued',
-                )
-                .take(5))
-          _activity(context, entry),
+        if (!needsSetup)
+          Wrap(
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            children: [
+              if (!paused || transitioning)
+                PopupMenuButton<int>(
+                  key: const ValueKey('pause-relay'),
+                  tooltip: 'Pause notifications',
+                  enabled:
+                      displayedRunning &&
+                      !transitioning &&
+                      !state.changingRelay,
+                  onSelected: (minutes) =>
+                      perform(() => state.setPause(minutes)),
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(
+                      value: 15,
+                      child: Text('Pause for 15 minutes'),
+                    ),
+                    PopupMenuItem(value: 60, child: Text('Pause for 1 hour')),
+                    PopupMenuItem(
+                      value: -1,
+                      child: Text('Pause until I resume'),
+                    ),
+                  ],
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.pause,
+                          size: 18,
+                          color: displayedRunning
+                              ? colors.primary
+                              : colors.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Pause',
+                          style: TextStyle(
+                            color: displayedRunning
+                                ? colors.primary
+                                : colors.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              if (paused && !transitioning)
+                TextButton(
+                  key: const ValueKey('relay-toggle'),
+                  onPressed: enabled ? () => perform(state.stopRelay) : null,
+                  child: const Text('Stop'),
+                ),
+              _testButton(context, state),
+              if (needsFix && state.relayRunning)
+                TextButton(
+                  onPressed: () => _recover(context, status.recovery),
+                  child: Text(recoveryLabel),
+                ),
+            ],
+          ),
+        if (state.notificationControlsAllowed == false && state.setupCompleted)
+          ListTile(
+            key: const ValueKey('missing-notification-controls'),
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.notifications_off_outlined),
+            title: const Text('Relay controls are hidden'),
+            trailing: TextButton(
+              onPressed: () => _setup(context, state, initialStep: 1),
+              child: const Text('Allow'),
+            ),
+          ),
+        const SizedBox(height: 16),
+        const Divider(),
+        ListTile(
+          key: const ValueKey('home-rules'),
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.tune),
+          title: const Text('Apps & people'),
+          subtitle: Text(state.selectedAppsSummary),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: openRules,
+        ),
+        const Divider(),
+        const SizedBox(height: 16),
+        Text('Recent activity', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        if (recent.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Text(
+              'Your alerts will appear here.',
+              style: TextStyle(color: colors.onSurfaceVariant),
+            ),
+          ),
+        for (final entry in recent) _activity(context, entry),
         if (state.history.isNotEmpty)
           ExpansionTile(
             key: const ValueKey('activity-details'),
-            title: const Text('Delivery details'),
-            subtitle: const Text('Timing, queue events and troubleshooting'),
+            tilePadding: EdgeInsets.zero,
+            title: const Text('Activity details'),
             children: [
+              if (state.history.isEmpty) const Text('No activity yet.'),
               for (final entry in state.history.take(100))
                 _activity(context, entry, detailed: true),
+              Wrap(
+                spacing: 8,
+                children: [
+                  TextButton.icon(
+                    key: const ValueKey('export-report'),
+                    onPressed: exportReport,
+                    icon: const Icon(Icons.copy, size: 18),
+                    label: const Text('Copy diagnostic report'),
+                  ),
+                  TextButton(
+                    key: const ValueKey('clear-history'),
+                    onPressed: state.changingRelay
+                        ? null
+                        : () => perform(state.clearHistory),
+                    child: const Text('Clear history'),
+                  ),
+                ],
+              ),
             ],
           ),
-        Wrap(
-          spacing: 8,
-          children: [
-            TextButton.icon(
-              key: const ValueKey('export-report'),
-              onPressed: exportReport,
-              icon: const Icon(Icons.copy),
-              label: const Text('Copy sanitized report'),
-            ),
-            TextButton(
-              key: const ValueKey('clear-history'),
-              onPressed: state.changingRelay
-                  ? null
-                  : () => perform(state.clearHistory),
-              child: const Text('Clear relay history'),
-            ),
-          ],
-        ),
       ],
     );
   }
@@ -472,6 +424,10 @@ class RelayPanel extends StatelessWidget {
     final stage = entry['stage'] as String? ?? 'unknown';
     final title = switch (stage) {
       'detected' => 'Notification detected',
+      'combined' => 'Combined into one vibration',
+      'paused' => 'Quiet: notifications paused',
+      'quiet_hours' => 'Quiet: scheduled quiet hours',
+      'filtered' => 'Skipped by your rules',
       'merged' => 'Merged into next vibration',
       'queued' => 'Queued',
       'verified' => 'Command verified',
@@ -508,10 +464,55 @@ class RelayPanel extends StatelessWidget {
             ? Icons.error_outline
             : Icons.history,
       ),
-      title: Text('$source · $title'),
+      contentPadding: detailed ? null : EdgeInsets.zero,
+      title: Text(detailed ? '$source · $title' : source),
       subtitle: Text(
-        '$time${entry['latencyMillis'] == null ? "" : " · ${entry['latencyMillis']} ms total"}${code == null ? "" : "\n${DemoController.recoveryHint(code)}"}',
+        detailed
+            ? '$time${entry['latencyMillis'] == null ? "" : " · ${entry['latencyMillis']} ms total"}${code == null ? "" : "\n${DemoController.recoveryHint(code)}"}'
+            : '${switch (stage) {
+                'verified' => 'Sent',
+                'failed' || 'interrupted' => 'Not confirmed',
+                'combined' || 'merged' => 'Combined',
+                'paused' || 'quiet_hours' => 'Quiet',
+                _ => 'Skipped',
+              }} · $time',
       ),
+      trailing: detailed ? null : const Icon(Icons.chevron_right, size: 18),
+      onTap: detailed
+          ? null
+          : () => showModalBottomSheet<void>(
+              context: context,
+              useSafeArea: true,
+              isScrollControlled: true,
+              builder: (context) => SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      source,
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    Text('$title · $time'),
+                    const SizedBox(height: 16),
+                    Text(
+                      code != null
+                          ? DemoController.recoveryHint(code)
+                          : stage == 'verified'
+                          ? 'Your Air acknowledged the vibration command.'
+                          : 'This alert was handled according to your notification rules.',
+                    ),
+                    const SizedBox(height: 24),
+                    FilledButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Done'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
     );
   }
 }

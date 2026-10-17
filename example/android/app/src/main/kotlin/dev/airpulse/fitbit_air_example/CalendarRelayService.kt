@@ -8,6 +8,8 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -36,6 +38,59 @@ class CalendarRelayService : Service() {
     private val inFlight = mutableMapOf<String, Pair<String?, Long>>()
     private var selectedPackages = emptySet<String>()
     private var pulseStyle = "single"
+    private val previewReplies = mutableMapOf<String, (RelayWorkerResult) -> Unit>()
+    private val choices = mutableMapOf<String, RelayBurstChoice>()
+    private var displayedSilence: String? = null
+    private val silenceTick = Runnable { settingsChanged() }
+    private val clockReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) { settingsChanged() }
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        val filter = IntentFilter().apply { addAction(Intent.ACTION_TIME_CHANGED); addAction(Intent.ACTION_TIMEZONE_CHANGED) }
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(clockReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        else @Suppress("DEPRECATION") registerReceiver(clockReceiver, filter)
+    }
+
+    fun settingsChanged() {
+        val config = RelayRuleStore.read(this)
+        val packages = config.selectedPackages
+        if (packages != selectedPackages) {
+            selectedPackages = packages
+            if (ready) filter = CalendarAlertFilter(System.currentTimeMillis(),
+                CalendarNotificationListener.existingKeys(packages), packages)
+        }
+        val now = System.currentTimeMillis()
+        val reason = config.silence.reason(now)
+        if (reason != null) cancelWaiting(reason)
+        if (ready && reason != displayedSilence) {
+            displayedSilence = reason
+            getSystemService(NotificationManager::class.java).notify(902, buildNotification())
+        }
+        handler.removeCallbacks(silenceTick)
+        if (!stopping) {
+            val until = config.silence.pauseUntil
+            val delay = if (until > now) minOf(60_000L - now % 60_000L, until - now) else 60_000L - now % 60_000L
+            handler.postDelayed(silenceTick, maxOf(1L, delay))
+        }
+    }
+
+    private fun buildNotification(): Notification {
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        val stop = PendingIntent.getService(this, 0, Intent(this, CalendarRelayService::class.java).setAction(STOP), flags)
+        val open = PendingIntent.getActivity(this, 1, Intent(this, MainActivity::class.java), flags)
+        val silence = RelayRuleStore.read(this).silence.reason(System.currentTimeMillis())
+        val pause = PendingIntent.getService(this, 2, Intent(this, CalendarRelayService::class.java)
+            .setAction(if (silence == "paused") RESUME else PAUSE), flags)
+        val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, CHANNEL) else @Suppress("DEPRECATION") Notification.Builder(this)
+        return builder.setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
+            .setContentTitle("Air Relay")
+            .setContentText(when(silence) { "paused" -> "Paused · No notification vibrations"; "quiet_hours" -> "Quiet hours · No notification vibrations"; else -> "Listening for your notification rules" })
+            .setContentIntent(open).setOngoing(true)
+            .addAction(Notification.Action.Builder(null, if (silence == "paused") "Resume" else "Pause 15 min", pause).build())
+            .addAction(Notification.Action.Builder(null, "Stop", stop).build()).build()
+    }
     private var restrictedConversations = false
     private var allowedConversations = emptySet<String>()
     private val handler = Handler(Looper.getMainLooper())
@@ -59,11 +114,16 @@ class CalendarRelayService : Service() {
             requestStop("Relay stopped.")
             return START_NOT_STICKY
         }
+        if (intent?.action == PAUSE || intent?.action == RESUME) {
+            RelayRuleStore.update(this) { it.copy(silence = it.silence.copy(pauseUntil = if (intent.action == RESUME) 0 else System.currentTimeMillis() + 900_000)) }
+            if (engine == null) stopSelf()
+            return START_NOT_STICKY
+        }
         if (engine != null) return START_NOT_STICKY
         RelayConversations.stopCapture()
         restrictedConversations = RelayConversations.restricted(this)
         allowedConversations = RelayConversations.allowed(this)
-        selectedPackages = RelayAppSelection.selected(this)
+        selectedPackages = RelayRuleStore.read(this).selectedPackages
         pulseStyle = RelayAppSelection.pulseStyle(this)
         if (selectedPackages.isEmpty()) {
             saveOutcome("Select at least one notification app before starting.")
@@ -80,19 +140,7 @@ class CalendarRelayService : Service() {
             if (Build.VERSION.SDK_INT >= 26) manager.createNotificationChannel(
                 NotificationChannel(CHANNEL, "Notifications to Air", NotificationManager.IMPORTANCE_LOW)
             )
-            val stop = PendingIntent.getService(this, 0,
-                Intent(this, CalendarRelayService::class.java).setAction(STOP),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-            val open = PendingIntent.getActivity(this, 1, Intent(this, MainActivity::class.java),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-            val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, CHANNEL)
-                else @Suppress("DEPRECATION") Notification.Builder(this)
-            val notification = builder.setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
-                .setContentTitle("Notifications → Fitbit Air")
-                .setContentText(if (pulseStyle == "single") "Selected app alerts trigger one pulse. Tap Stop to disable."
-                    else "Selected app alerts trigger two pulses. Tap Stop to disable.")
-                .setContentIntent(open).setOngoing(true)
-                .addAction(Notification.Action.Builder(null, "Stop", stop).build()).build()
+            val notification = buildNotification()
             if (Build.VERSION.SDK_INT >= 29)
                 startForeground(902, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
             else startForeground(902, notification)
@@ -112,6 +160,7 @@ class CalendarRelayService : Service() {
                                 filter = CalendarAlertFilter(System.currentTimeMillis(),
                                     CalendarNotificationListener.existingKeys(selectedPackages), selectedPackages)
                                 ready = true
+                                settingsChanged()
                                 handler.removeCallbacks(watchdog)
                                 saveOutcome("Listening for alerts from ${selectedPackages.size} selected app(s).")
                                 result.success(null)
@@ -139,27 +188,38 @@ class CalendarRelayService : Service() {
         if (!ready || stopping) return
         val now = System.currentTimeMillis()
         if (filter?.accept(packageName, key, postedAt, now, ongoing, summary, messageTimestamp) != true) return
-        if (restrictedConversations && packageName in RelayConversationPolicy.packages &&
-            conversationIds.none { RelayConversationPolicy.accepts(packageName, true, allowedConversations, it) }) return
-        submit(sbnPackage = packageName, postedAt = postedAt)
+        val config = RelayRuleStore.read(this)
+        val match = config.match(packageName, conversationIds, restrictedConversations, allowedConversations)
+        if (match == null) { record(nextId(), packageName, postedAt, "filtered"); return }
+        val silence = config.silence.reason(now)
+        if (silence != null) { cancelWaiting(silence); record(nextId(), packageName, postedAt, silence); return }
+        submit(packageName, postedAt, match)
     }
 
-    fun testPulse() {
+    internal fun testPulse(preset: String? = null, completion: ((RelayWorkerResult) -> Unit)? = null) {
         check(ready && !stopping) { "Wait until the relay is listening." }
-        submit(sbnPackage = null, postedAt = System.currentTimeMillis())
+        val config = RelayRuleStore.read(this)
+        check(config.silence.reason(System.currentTimeMillis()) == null) { "Resume the relay or leave quiet hours before trying a vibration." }
+        val selected = preset?.let { RelayPreset.parse(it) } ?: config.defaultPreset
+        require(selected != RelayPreset.MUTE)
+        submit(null, System.currentTimeMillis(), RelayMatch(selected, 2), completion)
     }
 
-    private fun submit(sbnPackage: String?, postedAt: Long) {
+    private fun submit(sbnPackage: String?, postedAt: Long, match: RelayMatch, completion: ((RelayWorkerResult) -> Unit)? = null) {
         val id = nextId()
+        if (choices.size >= 256) {
+            record(id, sbnPackage, postedAt, "queue_full")
+            completion?.invoke(RelayWorkerResult("failed", "QUEUE_FULL"))
+            return
+        }
+        if (completion != null) previewReplies[id] = completion
+        choices[id] = RelayBurstChoice(match, System.currentTimeMillis())
         record(id, sbnPackage, postedAt, "detected")
         val now = System.currentTimeMillis()
         when (val decision = coalescer.onAlert(id, now)) {
-            RelayCoalescer.Decision.DispatchNow -> dispatch(id, sbnPackage, postedAt, postedAt + 30_000)
+            RelayCoalescer.Decision.DispatchNow -> dispatch(id, sbnPackage, postedAt, postedAt + 30_000, match.preset)
             is RelayCoalescer.Decision.Merged -> {
-                if (!holdingFollowUp) {
-                    holdingFollowUp = true
-                    begin()
-                }
+                if (!holdingFollowUp) { holdingFollowUp = true; begin() }
                 inFlight[id] = sbnPackage to postedAt
                 record(id, sbnPackage, postedAt, "merged")
                 decision.scheduleAtMillis?.let { handler.postDelayed(followUp, maxOf(0, it - now)) }
@@ -167,37 +227,68 @@ class CalendarRelayService : Service() {
         }
     }
 
-    /** Sends one command for every alert merged since the last session. */
+    private fun cancelWaiting(reason: String) {
+        handler.removeCallbacks(followUp)
+        coalescer.cancelFollowUp().forEach { id ->
+            choices.remove(id)
+            previewReplies.remove(id)?.invoke(RelayWorkerResult("failed", "SUPPRESSED"))
+            inFlight.remove(id)?.let { (source, postedAt) -> record(id, source, postedAt, reason) }
+        }
+        if (holdingFollowUp) { holdingFollowUp = false; end() }
+    }
+
     private fun sendFollowUp() {
         if (stopping || !coalescer.hasFollowUp) return
-        val members = coalescer.takeFollowUp().mapNotNull { inFlight.remove(it) }
         val now = System.currentTimeMillis()
-        dispatch(nextId(), members.lastOrNull()?.first, members.minOfOrNull { it.second } ?: now, now + 30_000)
+        val silence = RelayRuleStore.read(this).silence.reason(now)
+        if (silence != null) { cancelWaiting(silence); return }
+        val members = coalescer.takeFollowUp().mapNotNull { id ->
+            val source = inFlight.remove(id)
+            val choice = choices.remove(id)
+            if (source == null || choice == null) null else Triple(id, source, choice)
+        }
+        val fresh = members.filter { now >= it.second.second && now - it.second.second < 30_000 }
+        members.filterNot { it in fresh }.forEach {
+            record(it.first, it.second.first, it.second.second, "expired")
+            previewReplies.remove(it.first)?.invoke(RelayWorkerResult("failed", "EXPIRED"))
+        }
+        val winner = fresh.reduceOrNull { a, b -> if (a.third.prefer(b.third) === b.third) b else a }
+        fresh.forEach { record(it.first, it.second.first, it.second.second, "combined") }
+        if (winner != null) {
+            val id = nextId()
+            val replies = fresh.mapNotNull { previewReplies.remove(it.first) }
+            if (replies.isNotEmpty()) previewReplies[id] = { result -> replies.forEach { it(result) } }
+            dispatch(id, winner.second.first, winner.second.second, winner.second.second + 30_000, winner.third.match.preset)
+        } else coalescer.onFinished(now)
         holdingFollowUp = false
         end()
     }
 
-    private fun dispatch(id: String, sbnPackage: String?, postedAt: Long, expiresAt: Long) {
+    private fun dispatch(id: String, sbnPackage: String?, postedAt: Long, expiresAt: Long, preset: RelayPreset) {
         begin()
         refreshDeadline()
         inFlight[id] = sbnPackage to postedAt
         record(id, sbnPackage, postedAt, "queued")
         fun finished(result: RelayWorkerResult) {
+            previewReplies.remove(id)?.invoke(result)
+            choices.remove(id)
             inFlight.remove(id)
             record(id, sbnPackage, postedAt, result.stage, result.errorCode)
             saveOutcome("Haptic ${result.stage}${result.errorCode?.let { ": $it" } ?: ""}.")
             val now = System.currentTimeMillis()
-            coalescer.onFinished(now)?.let { if (!stopping) handler.postDelayed(followUp, it - now) }
+            coalescer.onFinished(now)?.let { if (!stopping) handler.postDelayed(followUp, maxOf(0, it - now)) }
             end()
+        }
+        val silence = RelayRuleStore.read(this).silence.reason(System.currentTimeMillis())
+        if (silence != null || System.currentTimeMillis() >= expiresAt) {
+            finished(RelayWorkerResult(silence ?: "expired", null)); return
         }
         channel?.invokeMethod("dispatch", mapOf(
             "id" to id, "expiresAt" to expiresAt,
-            "kind" to if (pulseStyle == "single") "tap" else "preview"
+            "kind" to if (preset == RelayPreset.DOUBLE) "preview" else "tap", "intensity" to preset.intensity
         ), object : MethodChannel.Result {
             override fun success(result: Any?) { finished(RelayWorkerResult.decode(result)) }
-            override fun error(code: String, message: String?, details: Any?) {
-                finished(RelayWorkerResult("failed", "WORKER_ERROR"))
-            }
+            override fun error(code: String, message: String?, details: Any?) { finished(RelayWorkerResult("failed", "WORKER_ERROR")) }
             override fun notImplemented() { finished(RelayWorkerResult("failed", "WORKER_UNAVAILABLE")) }
         })
     }
@@ -237,14 +328,9 @@ class CalendarRelayService : Service() {
         stopping = true
         saveOutcome(reason)
         channel?.invokeMethod("close", null)
-        handler.removeCallbacks(followUp)
-        coalescer.cancelFollowUp().forEach { id ->
-            inFlight.remove(id)?.let { (source, postedAt) -> record(id, source, postedAt, "cancelled") }
-        }
-        if (holdingFollowUp) {
-            holdingFollowUp = false
-            end()
-        } else if (pending == 0) stopSelf()
+        handler.removeCallbacks(silenceTick)
+        cancelWaiting("cancelled")
+        if (pending == 0) stopSelf()
     }
 
     override fun onDestroy() {
@@ -256,6 +342,12 @@ class CalendarRelayService : Service() {
                 maxOf(0, endedAt - source.second), "SERVICE_STOPPED"))
         }
         inFlight.clear()
+        choices.clear()
+        val replies = previewReplies.values.toList()
+        previewReplies.clear()
+        replies.forEach { it(RelayWorkerResult("failed", "SERVICE_STOPPED")) }
+        unregisterReceiver(clockReceiver)
+        handler.removeCallbacks(silenceTick)
         if (active === this) active = null
         handler.removeCallbacks(watchdog)
         handler.removeCallbacks(followUp)
@@ -305,6 +397,8 @@ class CalendarRelayService : Service() {
 
         private const val CHANNEL = "calendar_relay"
         private const val STOP = "calendar_relay.STOP"
+        private const val PAUSE = "calendar_relay.PAUSE"
+        private const val RESUME = "calendar_relay.RESUME"
         var active: CalendarRelayService? = null
             private set
 
@@ -318,13 +412,17 @@ class CalendarRelayService : Service() {
             context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
 
         fun status(context: Context): Map<String, Any?> = mapOf(
+            "notificationControlsAllowed" to context.getSystemService(android.app.NotificationManager::class.java).areNotificationsEnabled(),
+            "setupStep" to context.getSharedPreferences("relay_onboarding", MODE_PRIVATE).getInt("step", 0).coerceIn(0, 3),
+            "setupCompleted" to context.getSharedPreferences("relay_onboarding", MODE_PRIVATE).getBoolean("completed", false),
             "access" to hasAccess(context),
             "connected" to CalendarNotificationListener.connected,
             "running" to isRunning,
             "ready" to (active?.ready == true),
             "stopping" to (active?.stopping == true),
-            "selectedApps" to RelayAppSelection.selected(context).sorted(),
-            "pulseStyle" to RelayAppSelection.pulseStyle(context),
+            "selectedApps" to RelayRuleStore.read(context).selectedPackages.sorted(),
+            "pulseStyle" to RelayRuleStore.read(context).defaultPreset.id,
+            "rules" to RelayRuleStore.status(context),
             "conversations" to RelayConversations.status(context),
             "history" to RelayHistory.read(context).asReversed().map { it.toMap() },
             "bluetoothPermission" to bluetoothPermission(context),

@@ -1,5 +1,10 @@
 ## Unreleased
 
+- Show battery and passive Bluetooth link status on Home. Persist timestamped
+  battery readings locally, label older values as saved, and allow an explicit
+  refresh only when the relay and device operations are idle. Never poll the
+  secure battery endpoint or stop a relay to update it.
+
 - Add `FitbitAir.readBattery()`: the battery percentage Google Health shows
   (verified equal), voltage in millivolts, and whether the Air is on its
   charger (verified on and off the charger).
@@ -8,6 +13,30 @@
   `readSignalStrength()` for a rough proximity hint in dBm.
 - Add `FitbitAirDiagnostics.watchChannelActivity()`: passively reports whether
   Google Health is idle, polling or syncing on the Air's shared channel.
+- Keep Start/Stop headings stable until native readiness/shutdown is confirmed;
+  retain button geometry and colors during progress, and avoid flashing busy
+  indicators for fast operations. Use a teal Start action and a neutral Stop.
+- Respect reduced motion and keep configuration updates out of the main status.
+
+- Open setup full screen on first launch and save its resume position.
+- Make reading notifications and showing relay controls explicit separate grants;
+  remove the unexpected notification permission prompt when starting the relay.
+- Simplify Home and Rules with flat settings rows and compact activity; move setup review to
+  Device and diagnostics into activity details.
+
+- Add a four-step guided setup with permission explanations, app selection,
+  optional vibration confirmation, and persistent local completion state.
+- Show actionable relay readiness and distinguish historical delivery failures
+  from current permission, Bluetooth, pause and startup states.
+
+- Keep app rows stable while toggling notification rules. Regroup selected apps
+  explicitly or when reopening Rules. Reuse app icon images across status
+  refreshes to prevent flicker.
+
+- Give WhatsApp people a dedicated screen above the app list, with chat search,
+  integrated vibration editing and a separate guided discovery flow.
+- Shorten the Home subtitle and remove em dashes from app text.
+
 - Sync-aware hold: before each secure command, passively observe the shared
   tracker channel and wait (up to 10 s) while Google Health is transferring
   data. Polling never blocks a command. Reported as `channelHold`. In 8
@@ -18,6 +47,14 @@
   for the 6 s stall deadline.
 - Research: taps, including a recognized alarm dismissal, send nothing to the
   phone; real-time tap detection is not possible with the tested firmware.
+
+- Add Home/Rules/Device navigation with accessible Lab tools, per-app and
+  WhatsApp-chat vibration presets, quiet hours and timed pause in the example.
+- Preserve transport cooldown while choosing a deterministic preset for merged
+  alerts; suppress waiting work during silence and expire stale alerts.
+- Add optional explicit tap intensity to `AirHapticCommand`; other command kinds
+  reject it. Existing commands and defaults remain compatible.
+- Show timestamped, non-live wrist observations from manual Lab trials only.
 
 ## 0.1.3
 

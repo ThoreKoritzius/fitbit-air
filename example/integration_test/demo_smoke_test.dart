@@ -19,7 +19,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 100));
       }
       expect(controller.initialized, isTrue);
-      await tester.tap(find.byKey(const ValueKey('nav-lab')));
+      await controller.runAction('openLab');
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('secure-duration')), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('nav-device')));
