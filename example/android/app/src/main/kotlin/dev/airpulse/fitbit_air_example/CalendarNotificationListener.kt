@@ -9,13 +9,22 @@ class CalendarNotificationListener : NotificationListenerService() {
     override fun onListenerConnected() {
         instance = this
         connected = true
+        RelayAutoResume.resume(applicationContext, "listener")
     }
 
     override fun onListenerDisconnected() {
         RelayConversations.stopCapture()
         instance = null
         connected = false
-        CalendarRelayService.active?.requestStop("Notification access disconnected. Start the relay again when access is available.")
+        if (!CalendarRelayService.hasAccess(this)) {
+            // Access revoked: the user turned notifications off.
+            RelayAutoResume.setWanted(this, false)
+            CalendarRelayService.active?.requestStop("Notification access was turned off. Allow it to start again.")
+            return
+        }
+        // A temporary unbind: resume when Android reconnects the listener.
+        CalendarRelayService.active?.requestStop("Notification access disconnected. Air Relay resumes when Android reconnects it.")
+        runCatching { NotificationListenerService.requestRebind(android.content.ComponentName(this, CalendarNotificationListener::class.java)) }
     }
 
     override fun onDestroy() {

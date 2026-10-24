@@ -11,7 +11,8 @@ the app's data handling or permissions change.
   - Bluetooth: `BLUETOOTH_CONNECT`, and `BLUETOOTH_SCAN` with `neverForLocation`.
   - On Android 11 and older only: `BLUETOOTH`, `BLUETOOTH_ADMIN` and `ACCESS_FINE_LOCATION`.
   - Relay service: `FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_CONNECTED_DEVICE`.
-  - Other: `WAKE_LOCK` and `POST_NOTIFICATIONS`, plus the notification listener service.
+  - Other: `WAKE_LOCK`, `POST_NOTIFICATIONS` and `RECEIVE_BOOT_COMPLETED`, plus the notification listener service.
+    The boot permission only resumes the relay after a restart if the user left it on.
   - **No `INTERNET` permission.**
 
 ## Data safety

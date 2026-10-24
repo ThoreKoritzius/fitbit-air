@@ -97,13 +97,18 @@ class CalendarRelayService : Service() {
             .addAction(Notification.Action.Builder(null, "Stop", stop).build()).build()
     }
     private val handler = Handler(Looper.getMainLooper())
+    private var waitingForListener = false
+    /** Set when the relay came back on its own; recorded once it starts. */
+    private var resumeReason: String? = null
     private val coalescer = RelayCoalescer()
     private var holdingFollowUp = false
     private val followUp = Runnable { sendFollowUp() }
     private val watchdog = Runnable {
-        saveOutcome("Relay command exceeded its deadline; stopped. Delivery is uncertain; no retry.")
+        saveOutcome("Relay command exceeded its deadline; restarting. Delivery is uncertain; no retry.")
+        resumeAfterStop = "watchdog"
         stopSelf()
     }
+    private var resumeAfterStop: String? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         starting = false
@@ -114,6 +119,7 @@ class CalendarRelayService : Service() {
             return START_NOT_STICKY
         }
         if (intent?.action == STOP) {
+            RelayAutoResume.setWanted(this, false)
             requestStop("Relay stopped.")
             return START_NOT_STICKY
         }
@@ -122,7 +128,9 @@ class CalendarRelayService : Service() {
             if (engine == null) stopSelf()
             return START_NOT_STICKY
         }
-        if (engine != null) return START_NOT_STICKY
+        if (engine != null || waitingForListener) return START_STICKY
+        // Null after Android restarted the sticky service in a new process.
+        resumeReason = intent?.getStringExtra(RESUME_REASON) ?: if (intent == null) "process" else null
         selectedPackages = RelayRuleStore.read(this).selectedPackages
         toneEnabled = RelayRuleStore.read(this).tone.enabled
         if (toneEnabled) RelayToneLexicons.preload(this)
@@ -132,7 +140,9 @@ class CalendarRelayService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (!hasAccess(this) || !CalendarNotificationListener.connected) {
+        val resuming = resumeReason != null
+        if (!hasAccess(this) || (!CalendarNotificationListener.connected && !resuming)) {
+            if (!hasAccess(this)) RelayAutoResume.setWanted(this, false)
             saveOutcome("Enable notification access and wait for the listener to connect, then start again.")
             stopSelf()
             return START_NOT_STICKY
@@ -147,6 +157,45 @@ class CalendarRelayService : Service() {
                 startForeground(902, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
             else startForeground(902, notification)
             active = this
+        } catch (error: Exception) {
+            saveOutcome("Relay startup failed: ${error.javaClass.simpleName}")
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        if (!CalendarNotificationListener.connected) {
+            // After a restart Android binds the listener a little later.
+            waitingForListener = true
+            saveOutcome("Resuming notifications…")
+            val deadline = android.os.SystemClock.elapsedRealtime() + LISTENER_WAIT_MS
+            val check = object : Runnable {
+                override fun run() {
+                    if (active !== this@CalendarRelayService || stopping) return
+                    when {
+                        CalendarNotificationListener.connected -> {
+                            waitingForListener = false
+                            beginRelay()
+                        }
+                        android.os.SystemClock.elapsedRealtime() >= deadline -> {
+                            waitingForListener = false
+                            requestStop("Notification access isn’t connected yet. Air Relay resumes when it is.")
+                        }
+                        else -> handler.postDelayed(this, 500)
+                    }
+                }
+            }
+            handler.post(check)
+            return START_STICKY
+        }
+        beginRelay()
+        return START_STICKY
+    }
+
+    private fun beginRelay() {
+        try {
+            resumeReason?.let { reason ->
+                RelayHistory.add(this, RelayActivity("resumed-$reason-${System.currentTimeMillis()}",
+                    null, "resumed", System.currentTimeMillis()))
+            }
             saveOutcome("Starting notification relay…")
             val loader = FlutterInjector.instance().flutterLoader()
             loader.startInitialization(applicationContext)
@@ -181,7 +230,6 @@ class CalendarRelayService : Service() {
             saveOutcome("Relay startup failed: ${error.javaClass.simpleName}")
             stopSelf()
         }
-        return START_NOT_STICKY
     }
 
     fun acceptsPackage(packageName: String): Boolean = ready && !stopping && packageName in selectedPackages
@@ -381,6 +429,10 @@ class CalendarRelayService : Service() {
         engine = null
         releaseWakeLock()
         stopForeground(STOP_FOREGROUND_REMOVE)
+        resumeAfterStop?.let { reason ->
+            val context = applicationContext
+            handler.postDelayed({ RelayAutoResume.resume(context, reason) }, 2_000L)
+        }
         super.onDestroy()
     }
 
@@ -400,12 +452,13 @@ class CalendarRelayService : Service() {
         private var cancelStart = false
         val isRunning: Boolean get() = active != null || starting
 
-        fun start(context: Context) {
+        fun start(context: Context, resumeReason: String? = null) {
             if (active != null || starting) return
             starting = true
             cancelStart = false
             try {
                 val intent = Intent(context, CalendarRelayService::class.java)
+                resumeReason?.let { intent.putExtra(RESUME_REASON, it) }
                 if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent)
                 else context.startService(intent)
             } catch (error: Exception) {
@@ -420,6 +473,8 @@ class CalendarRelayService : Service() {
         }
 
         private const val CHANNEL = "calendar_relay"
+        private const val RESUME_REASON = "calendar_relay.RESUME_REASON"
+        private const val LISTENER_WAIT_MS = 60_000L
         private const val STOP = "calendar_relay.STOP"
         private const val PAUSE = "calendar_relay.PAUSE"
         private const val RESUME = "calendar_relay.RESUME"
