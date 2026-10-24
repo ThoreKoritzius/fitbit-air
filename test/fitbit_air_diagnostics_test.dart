@@ -262,4 +262,22 @@ void main() {
       AirChannelActivity.polling,
     ]);
   });
+
+  test('link health counts fallbacks and rebuilds by reason', () {
+    final health = AirLinkHealth.fromMap({
+      'linkRecoveries': {
+        'silent_fallback': 2,
+        'rebuilt_after_fallback': 2,
+        'rebuilt_bluetooth_on': 1,
+      },
+      'lastLinkRecoveryAtMillis': 1000,
+    });
+    expect(health.silentFallbacks, 2);
+    expect(health.rebuilds, {'after_fallback': 2, 'bluetooth_on': 1});
+    expect(health.totalRecoveries, 5);
+    expect(health.lastRecoveryAt, DateTime.fromMillisecondsSinceEpoch(1000));
+    final empty = AirLinkHealth.fromMap(const {});
+    expect(empty.totalRecoveries, 0);
+    expect(empty.lastRecoveryAt, isNull);
+  });
 }

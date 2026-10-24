@@ -1,7 +1,13 @@
-## Unreleased
+## 0.2.1
 
 ### Package
 
+- `AirHapticDispatcher` retries a `HANDSHAKE_TIMEOUT` once after 3 s
+  (`retryUnsent`, `retryDelay`). That error is raised before the secure
+  session exists, so nothing can have reached the Air; ambiguous failures are
+  still never retried. `AirHapticDispatchResult.attempts` is 2 when retried.
+- Add `FitbitAirDiagnostics.readLinkHealth()`: warm-link fallbacks and
+  rebuilds by reason since the process started.
 - Fix commands failing after ~22 s with `HANDSHAKE_TIMEOUT` while the warm
   link stayed connected but no longer received the Air's notifications. The
   warm link re-registers before each command; if a command on it still hears
@@ -13,6 +19,8 @@
 
 ### Example app
 
+- The Device tab notes when the connection recovered automatically, with
+  the count and time; the diagnostic report includes the counts.
 - One status language on every screen: the Air emblem with a badge and color
   per state (teal ready, neutral off, moon/pause for quiet, amber triangle
   for alerts that may not arrive, red for something to fix, a ring while

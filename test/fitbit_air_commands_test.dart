@@ -314,4 +314,81 @@ void main() {
       expect(calls.length, 1);
     });
   });
+
+  test('a failure that reached nothing is retried once after a pause', () {
+    fakeAsync((time) {
+      var attempt = 0;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call.method);
+        if (attempt++ == 0) {
+          throw PlatformException(code: 'HANDSHAKE_TIMEOUT', message: 'Raced.');
+        }
+        return success;
+      });
+      final dispatcher = AirHapticDispatcher();
+      AirHapticDispatchResult? result;
+      dispatcher.submit(command('raced')).then((r) => result = r);
+      time.flushMicrotasks();
+      expect(result, isNull);
+      expect(calls.length, 1);
+      time.elapse(const Duration(seconds: 3));
+      expect(result?.status, AirHapticDispatchStatus.completed);
+      expect(result?.attempts, 2);
+      expect(calls.length, 2);
+      dispatcher.close();
+    });
+  });
+
+  test('a second unsent failure is reported, not retried again', () {
+    fakeAsync((time) {
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call.method);
+        throw PlatformException(code: 'HANDSHAKE_TIMEOUT', message: 'Raced.');
+      });
+      final dispatcher = AirHapticDispatcher();
+      AirHapticDispatchResult? result;
+      dispatcher.submit(command('raced-twice')).then((r) => result = r);
+      time.elapse(const Duration(seconds: 10));
+      expect(result?.status, AirHapticDispatchStatus.failed);
+      expect(result?.error?.code, 'HANDSHAKE_TIMEOUT');
+      expect(result?.attempts, 2);
+      expect(calls.length, 2);
+      dispatcher.close();
+    });
+  });
+
+  test('no retry once expired, when disabled, or after close', () {
+    fakeAsync((time) {
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call.method);
+        throw PlatformException(code: 'HANDSHAKE_TIMEOUT', message: 'Raced.');
+      });
+      final dispatcher = AirHapticDispatcher();
+      AirHapticDispatchResult? expired;
+      dispatcher.submit(command('short', lifetime: 2)).then((r) => expired = r);
+      time.elapse(const Duration(seconds: 3));
+      expect(expired?.status, AirHapticDispatchStatus.expired);
+      expect(calls.length, 1);
+      dispatcher.close();
+
+      calls.clear();
+      final noRetry = AirHapticDispatcher(retryUnsent: false);
+      AirHapticDispatchResult? failed;
+      noRetry.submit(command('off')).then((r) => failed = r);
+      time.elapse(const Duration(seconds: 5));
+      expect(failed?.status, AirHapticDispatchStatus.failed);
+      expect(calls.length, 1);
+      noRetry.close();
+
+      calls.clear();
+      final closing = AirHapticDispatcher();
+      AirHapticDispatchResult? closed;
+      closing.submit(command('closing')).then((r) => closed = r);
+      time.flushMicrotasks();
+      closing.close();
+      time.elapse(const Duration(seconds: 5));
+      expect(closed?.status, AirHapticDispatchStatus.failed);
+      expect(calls.length, 1);
+    });
+  });
 }

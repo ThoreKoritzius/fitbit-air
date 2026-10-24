@@ -45,6 +45,11 @@ class FitbitAirDiagnostics {
       await _methods.invokeMapMethod<String, Object?>('transportDiagnostics') ??
       <String, Object?>{};
 
+  /// How often the warm link needed recovery in this process; see
+  /// [FitbitAir.keepLinkWarm]. Does not connect.
+  static Future<AirLinkHealth> readLinkHealth() async =>
+      AirLinkHealth.fromMap(await readTransportDiagnostics());
+
   /// Experimental, bounded wrist-presence events from the secure monitor.
   /// Opens the same bootstrap session as [watchSecureEvents], for up to 30s
   /// after ready. Cancel before another SDK operation. Repeated events are
@@ -313,4 +318,47 @@ enum AirChannelActivity {
 
   /// A data transfer is in progress; commands wait for it to finish.
   syncing,
+}
+
+/// Warm-link recoveries since the app process started.
+class AirLinkHealth {
+  const AirLinkHealth({
+    this.silentFallbacks = 0,
+    this.rebuilds = const {},
+    this.lastRecoveryAt,
+  });
+
+  factory AirLinkHealth.fromMap(Map<String, Object?> map) {
+    final counts = <String, int>{};
+    final raw = map['linkRecoveries'];
+    if (raw is Map) {
+      raw.forEach((key, value) {
+        if (key is String && value is int) counts[key] = value;
+      });
+    }
+    final last = map['lastLinkRecoveryAtMillis'];
+    return AirLinkHealth(
+      silentFallbacks: counts.remove('silent_fallback') ?? 0,
+      rebuilds: {
+        for (final entry in counts.entries)
+          if (entry.key.startsWith('rebuilt_'))
+            entry.key.substring('rebuilt_'.length): entry.value,
+      },
+      lastRecoveryAt: last is int && last > 0
+          ? DateTime.fromMillisecondsSinceEpoch(last)
+          : null,
+    );
+  }
+
+  /// Commands that found the warm link deaf and continued on a fresh
+  /// connection.
+  final int silentFallbacks;
+
+  /// Warm-link rebuilds by reason: `after_fallback`, `bluetooth_on`,
+  /// `stuck` or `missing`.
+  final Map<String, int> rebuilds;
+  final DateTime? lastRecoveryAt;
+
+  int get totalRecoveries =>
+      silentFallbacks + rebuilds.values.fold(0, (sum, n) => sum + n);
 }

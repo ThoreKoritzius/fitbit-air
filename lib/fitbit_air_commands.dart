@@ -57,15 +57,21 @@ enum AirHapticDispatchStatus {
 }
 
 class AirHapticDispatchResult {
-  const AirHapticDispatchResult(this.status, {this.error});
+  const AirHapticDispatchResult(this.status, {this.error, this.attempts = 1});
   final AirHapticDispatchStatus status;
   final FitbitAirException? error;
+
+  /// 2 when the command was retried after a failure that reached nothing on
+  /// the Air; see [AirHapticDispatcher.retryUnsent].
+  final int attempts;
 }
 
 /// Bounded, in-memory notification-command dispatch in one Dart isolate.
 ///
 /// Reuse one dispatcher. Accepted IDs are remembered even after failure: a lost
-/// response can mean a command physically ran. No automatic retry is performed.
+/// response can mean a command physically ran, so such failures are never
+/// retried. The one exception is [retryUnsent]: a failure raised before any
+/// command can reach the Air (`HANDSHAKE_TIMEOUT`) is retried once.
 /// Host apps must persist deduplication across restarts and coordinate separate
 /// isolates/processes. The Android transport additionally rejects simultaneous
 /// operations across Flutter engines in the same process with BUSY.
@@ -75,6 +81,8 @@ class AirHapticDispatcher {
     this.deduplicationWindow = const Duration(minutes: 5),
     this.maxPending = 4,
     this.maxRemembered = 256,
+    this.retryUnsent = true,
+    this.retryDelay = const Duration(seconds: 3),
   }) {
     if (minimumInterval.isNegative ||
         deduplicationWindow <= Duration.zero ||
@@ -88,6 +96,15 @@ class AirHapticDispatcher {
   final Duration deduplicationWindow;
   final int maxPending;
   final int maxRemembered;
+
+  /// Retry once, after [retryDelay], when the failure guarantees nothing
+  /// reached the Air: the secure session needed for any command never
+  /// started, usually because Google Health was handshaking at the same time.
+  final bool retryUnsent;
+  final Duration retryDelay;
+
+  /// Errors raised before any device command can have been sent.
+  static const unsentErrorCodes = {'HANDSHAKE_TIMEOUT'};
   final _queue = Queue<_PendingCommand>();
   final _seen = <String, DateTime>{};
   final _pendingIds = <String>{};
@@ -150,70 +167,25 @@ class AirHapticDispatcher {
           final wait = lastFinished
               .add(minimumInterval)
               .difference(clock.now());
-          if (wait > Duration.zero) {
-            final waiting = Completer<void>();
-            _delayWait = waiting;
-            _delayTimer = Timer(wait, waiting.complete);
-            await waiting.future;
-            _delayTimer = null;
-            _delayWait = null;
-          }
+          await _pause(wait);
         }
         var result = const AirHapticDispatchResult(
           AirHapticDispatchStatus.closed,
         );
         if (!_closed) {
-          if (!clock.now().isBefore(pending.command.expiresAt)) {
-            result = const AirHapticDispatchResult(
-              AirHapticDispatchStatus.expired,
-            );
-          } else {
-            try {
-              if (pending.command.kind == AirHapticKind.tap) {
-                final tap = await FitbitAir.tap(
-                  intensity: pending.command.intensity,
-                );
-                if (!tap.verified) {
-                  throw const FitbitAirException(
-                    'UNVERIFIED',
-                    'Tap was not verified.',
-                  );
-                }
-              } else if (pending.command.kind == AirHapticKind.singlePulse) {
-                final change = await FitbitAir.pulse();
-                if (!change.verified) {
-                  throw const FitbitAirException(
-                    'UNVERIFIED',
-                    'Pulse was not verified.',
-                  );
-                }
-              } else {
-                final preview = await FitbitAir.vibrate();
-                if (!preview.verified || !preview.restored) {
-                  throw const FitbitAirException(
-                    'UNVERIFIED',
-                    'Restoration was not verified.',
-                  );
-                }
-              }
-              result = const AirHapticDispatchResult(
-                AirHapticDispatchStatus.completed,
-              );
-            } on FitbitAirException catch (error) {
+          result = await _attempt(pending.command);
+          final code = result.error?.code;
+          if (retryUnsent &&
+              result.status == AirHapticDispatchStatus.failed &&
+              unsentErrorCodes.contains(code)) {
+            await _pause(retryDelay);
+            if (!_closed) {
+              final retried = await _attempt(pending.command);
               result = AirHapticDispatchResult(
-                AirHapticDispatchStatus.failed,
-                error: error,
+                retried.status,
+                error: retried.error,
+                attempts: 2,
               );
-            } catch (_) {
-              result = const AirHapticDispatchResult(
-                AirHapticDispatchStatus.failed,
-                error: FitbitAirException(
-                  'DISPATCH_FAILED',
-                  'Haptic dispatch failed.',
-                ),
-              );
-            } finally {
-              _lastFinished = clock.now();
             }
           }
         }
@@ -222,6 +194,60 @@ class AirHapticDispatcher {
       }
     } finally {
       _running = false;
+    }
+  }
+
+  /// Waits [duration]; [close] ends the wait early.
+  Future<void> _pause(Duration duration) async {
+    if (duration <= Duration.zero) return;
+    final waiting = Completer<void>();
+    _delayWait = waiting;
+    _delayTimer = Timer(duration, waiting.complete);
+    await waiting.future;
+    _delayTimer = null;
+    _delayWait = null;
+  }
+
+  Future<AirHapticDispatchResult> _attempt(AirHapticCommand command) async {
+    if (!clock.now().isBefore(command.expiresAt)) {
+      return const AirHapticDispatchResult(AirHapticDispatchStatus.expired);
+    }
+    try {
+      if (command.kind == AirHapticKind.tap) {
+        final tap = await FitbitAir.tap(intensity: command.intensity);
+        if (!tap.verified) {
+          throw const FitbitAirException('UNVERIFIED', 'Tap was not verified.');
+        }
+      } else if (command.kind == AirHapticKind.singlePulse) {
+        final change = await FitbitAir.pulse();
+        if (!change.verified) {
+          throw const FitbitAirException(
+            'UNVERIFIED',
+            'Pulse was not verified.',
+          );
+        }
+      } else {
+        final preview = await FitbitAir.vibrate();
+        if (!preview.verified || !preview.restored) {
+          throw const FitbitAirException(
+            'UNVERIFIED',
+            'Restoration was not verified.',
+          );
+        }
+      }
+      return const AirHapticDispatchResult(AirHapticDispatchStatus.completed);
+    } on FitbitAirException catch (error) {
+      return AirHapticDispatchResult(
+        AirHapticDispatchStatus.failed,
+        error: error,
+      );
+    } catch (_) {
+      return const AirHapticDispatchResult(
+        AirHapticDispatchStatus.failed,
+        error: FitbitAirException('DISPATCH_FAILED', 'Haptic dispatch failed.'),
+      );
+    } finally {
+      _lastFinished = clock.now();
     }
   }
 

@@ -57,7 +57,7 @@ Or add it to `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  fitbit_air: ^0.2.0
+  fitbit_air: ^0.2.1
 ```
 
 To try unreleased changes, depend on the Git repository instead:
@@ -197,8 +197,10 @@ its own transport and loads no code from it.
 
 For alerts from push messages or other apps, queue commands through
 `AirHapticDispatcher` from `package:fitbit_air/fitbit_air_commands.dart`. It
-serializes commands, drops duplicates and expired ones, and never retries a
-command blindly:
+serializes commands and drops duplicates and expired ones. It retries only a
+failure that guarantees nothing reached the Air (`HANDSHAKE_TIMEOUT`: the
+secure session never started), once, after 3 s; a lost or ambiguous result
+is never retried:
 
 ```dart
 final haptics = AirHapticDispatcher();
@@ -224,7 +226,10 @@ await FitbitAir.keepLinkWarm(false); // when it stops
 ```
 
 The warm link never writes on its own and does not compete with Google Health;
-Android reconnects it when the Air returns to range.
+Android reconnects it when the Air returns to range. If it stops receiving
+from the Air, a command continues on a fresh connection and the link is
+rebuilt, as it is after Bluetooth is switched back on.
+`FitbitAirDiagnostics.readLinkHealth()` reports how often that happened.
 
 ## Current scope
 
