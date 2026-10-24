@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'demo_controller.dart';
+import 'status_style.dart';
 
 /// Cached observations, clearly separate from the relay's on/off state.
 class AirStatusStrip extends StatelessWidget {
@@ -32,22 +33,33 @@ class AirStatusStrip extends StatelessWidget {
         spacing: 12,
         children: [
           if (state.airConnected != null)
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  state.airConnected!
-                      ? Icons.bluetooth_connected
-                      : Icons.bluetooth_disabled,
-                  size: 16,
-                  color: colors.onSurfaceVariant,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  state.airConnected! ? 'Connected' : 'Disconnected',
-                  style: Theme.of(context).textTheme.labelMedium,
-                ),
-              ],
+            Builder(
+              builder: (context) {
+                final connected = state.airConnected!;
+                final color = connected
+                    ? colors.primary
+                    : StatusStyle.warningForeground(
+                        Theme.of(context).brightness,
+                      );
+                return Row(
+                  key: const ValueKey('air-connection'),
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      connected ? Icons.bluetooth_connected : Icons.link_off,
+                      size: 16,
+                      color: color,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      connected ? 'Connected' : 'Not connected',
+                      style: Theme.of(
+                        context,
+                      ).textTheme.labelMedium?.copyWith(color: color),
+                    ),
+                  ],
+                );
+              },
             ),
           Tooltip(
             message:

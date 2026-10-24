@@ -37,6 +37,15 @@ internal class AirWarmLink(private val context: Context) {
     @Volatile var ready = false
         private set
     @Volatile private var readyAt = 0L
+    @Volatile private var notReadySince = SystemClock.elapsedRealtime()
+
+    /** Not ready for [STUCK_MILLIS], although Android should have reconnected. */
+    fun isStuck(nowMillis: Long): Boolean = !ready && nowMillis - notReadySince >= STUCK_MILLIS
+
+    private fun markNotReady() {
+        if (ready) notReadySince = SystemClock.elapsedRealtime()
+        ready = false
+    }
 
     /**
      * Ready long enough to reuse. A command started right after (re)connecting
@@ -55,6 +64,17 @@ internal class AirWarmLink(private val context: Context) {
         gatt = device.connectGatt(context, true, callback, BluetoothDevice.TRANSPORT_LE)
     }
 
+    /**
+     * Re-registers Android's local notification routing for the tracker
+     * channel. Local only, no radio traffic; guards against a client that
+     * stays connected but no longer receives notifications.
+     */
+    fun refreshSubscription(): Boolean {
+        val g = gatt ?: return false
+        val rx = g.getService(TRACKER_SERVICE)?.getCharacteristic(TRACKER_RX) ?: return false
+        return g.setCharacteristicNotification(rx, true)
+    }
+
     /** Tracker traffic within the last [windowMillis], oldest first. */
     fun recentTraffic(nowMillis: Long, windowMillis: Long = HISTORY_MILLIS): List<Pair<Long, Int>> =
         synchronized(recent) { recent.filter { nowMillis - it.first <= windowMillis } }
@@ -62,7 +82,7 @@ internal class AirWarmLink(private val context: Context) {
     fun close() {
         if (closed) return
         closed = true
-        ready = false
+        markNotReady()
         delegate = null
         val connection = gatt
         gatt = null
@@ -100,7 +120,7 @@ internal class AirWarmLink(private val context: Context) {
                 if (status == BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_CONNECTED) {
                     if (!ready) g.discoverServices()
                 } else {
-                    ready = false
+                    markNotReady()
                 }
             }
         }
@@ -135,6 +155,16 @@ internal class AirWarmLink(private val context: Context) {
             delegate?.onCharacteristicChanged(g, c)
         }
 
+        override fun onServiceChanged(g: BluetoothGatt) {
+            delegate?.onServiceChanged(g)
+            // Cached handles may be stale: rediscover and subscribe again.
+            handler.post {
+                if (closed || g !== gatt) return@post
+                markNotReady()
+                g.discoverServices()
+            }
+        }
+
         override fun onCharacteristicWrite(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) {
             delegate?.onCharacteristicWrite(g, c, status)
         }
@@ -155,6 +185,7 @@ internal class AirWarmLink(private val context: Context) {
 
     companion object {
         const val SETTLE_MILLIS = 3_000L
+        const val STUCK_MILLIS = 120_000L
 
         fun settled(readyAtMillis: Long, nowMillis: Long): Boolean = nowMillis - readyAtMillis >= SETTLE_MILLIS
 

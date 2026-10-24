@@ -2,6 +2,8 @@ import 'package:fitbit_air/fitbit_air.dart';
 import 'package:flutter/material.dart';
 import 'air_status_strip.dart';
 import 'demo_controller.dart';
+import 'relay_status.dart';
+import 'status_style.dart';
 
 class DeviceOverview extends StatelessWidget {
   const DeviceOverview({
@@ -30,8 +32,13 @@ class DeviceOverview extends StatelessWidget {
     final connection = state.airConnected == true
         ? 'Connected'
         : state.airConnected == false
-        ? 'No active link'
+        ? 'Not connected'
         : 'Connection unknown';
+    final level = state.airConnected == true
+        ? StatusLevel.active
+        : state.airConnected == false
+        ? StatusLevel.warning
+        : StatusLevel.idle;
     final battery = state.battery;
     return Container(
       key: const ValueKey('device-overview'),
@@ -46,18 +53,10 @@ class DeviceOverview extends StatelessWidget {
         children: [
           Row(
             children: [
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: colors.surfaceContainerHighest,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.watch_outlined,
-                  size: 42,
-                  color: colors.primary,
-                ),
+              StatusEmblem(
+                key: const ValueKey('device-emblem'),
+                level: level,
+                size: 64,
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -83,9 +82,7 @@ class DeviceOverview extends StatelessWidget {
                         Icon(
                           Icons.circle,
                           size: 7,
-                          color: state.airConnected == true
-                              ? colors.primary
-                              : colors.onSurfaceVariant,
+                          color: StatusStyle.of(context, level).foreground,
                         ),
                         const SizedBox(width: 6),
                         Expanded(
