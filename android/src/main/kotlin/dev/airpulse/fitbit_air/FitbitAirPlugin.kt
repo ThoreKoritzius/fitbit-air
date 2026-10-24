@@ -720,6 +720,7 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
     private fun abandonSilentWarmLink(device: BluetoothDevice) {
         val callback = operationCallback ?: return
         android.util.Log.d("FitbitAir", "warm link silent; reconnecting")
+        AirTransportDiagnostics.recordLinkRecovery("silent_fallback")
         warmLinkFallback = "silent"
         handshakeDeadline?.let(handler::removeCallbacks)
         handshakeDeadline = null
@@ -784,6 +785,7 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
         if (!warmLinkWanted || pendingResult != null) return
         val device = findBondedAir() ?: return
         android.util.Log.d("FitbitAir", "warm link rebuilt: $reason")
+        AirTransportDiagnostics.recordLinkRecovery("rebuilt_$reason")
         warmLink?.close()
         warmLink = null
         startWarmLink(device)

@@ -29,6 +29,9 @@ class DemoController extends ChangeNotifier {
   final actions = <String, DemoAction>{};
   Future<void> Function()? cancelCurrent;
   Map<String, Object?> transportDiagnostics = {};
+
+  /// Warm-link recoveries in the relay's process, from [transportDiagnostics].
+  AirLinkHealth get linkHealth => AirLinkHealth.fromMap(transportDiagnostics);
   RelaySettings settings = const RelaySettings();
   AirWristPresenceEvent? lastWristObservation;
   AirBattery? battery;
@@ -1153,7 +1156,7 @@ class DemoController extends ChangeNotifier {
   };
   String exportJson() => const JsonEncoder.withIndent('  ').convert(report());
 
-  static const appVersion = '0.2.0';
+  static const appVersion = '0.2.1';
 
   static String recoveryHint(String code) => switch (code) {
     'TIMEOUT' =>

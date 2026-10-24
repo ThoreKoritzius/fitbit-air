@@ -27,6 +27,15 @@ internal class AirCleanupTrace {
 internal object AirTransportDiagnostics {
     private val history = ArrayDeque<Map<String, Any>>()
     private val processStartedAtMillis = System.currentTimeMillis()
+    private val linkRecoveries = mutableMapOf<String, Int>()
+    private var lastLinkRecoveryAtMillis = 0L
+
+    /** Counts warm-link recoveries by fixed reason label. */
+    @Synchronized
+    fun recordLinkRecovery(reason: String) {
+        linkRecoveries[reason] = (linkRecoveries[reason] ?: 0) + 1
+        lastLinkRecoveryAtMillis = System.currentTimeMillis()
+    }
 
     @Synchronized
     fun record(operation: String, steps: Map<String, String>) {
@@ -44,5 +53,7 @@ internal object AirTransportDiagnostics {
         "processStartedAtMillis" to processStartedAtMillis,
         "appLeaseHeld" to AirTransportLease.isHeld(),
         "cleanupHistory" to history.toList(),
+        "linkRecoveries" to linkRecoveries.toMap(),
+        "lastLinkRecoveryAtMillis" to lastLinkRecoveryAtMillis,
     )
 }

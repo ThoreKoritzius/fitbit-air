@@ -19,7 +19,14 @@ void main() {
           ..batteryReadAt = DateTime.now().subtract(const Duration(hours: 2))
           ..airConnected = false
           ..signalRssi = -67
-          ..signalReadAt = DateTime.now();
+          ..signalReadAt = DateTime.now()
+          ..transportDiagnostics = {
+            'linkRecoveries': {
+              'silent_fallback': 1,
+              'rebuilt_after_fallback': 1,
+            },
+            'lastLinkRecoveryAtMillis': DateTime.now().millisecondsSinceEpoch,
+          };
         addTearDown(state.dispose);
         await tester.pumpWidget(
           MaterialApp(
@@ -41,6 +48,7 @@ void main() {
         expect(find.text('Fitbit Air'), findsOneWidget);
         expect(find.text('15%'), findsOneWidget);
         expect(find.text('Not connected'), findsOneWidget);
+        expect(find.byKey(const ValueKey('link-recoveries')), findsOneWidget);
         expect(find.textContaining('-67 dBm'), findsOneWidget);
         expect(tester.takeException(), isNull);
       },

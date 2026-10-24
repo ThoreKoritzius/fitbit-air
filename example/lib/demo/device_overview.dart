@@ -169,6 +169,26 @@ class DeviceOverview extends StatelessWidget {
           ),
           if (state.signalError != null)
             Text(state.signalError!, style: text.bodySmall),
+          if (state.linkHealth.totalRecoveries > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
+                key: const ValueKey('link-recoveries'),
+                children: [
+                  Icon(Icons.autorenew, size: 16, color: colors.primary),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Connection recovered automatically ${state.linkHealth.totalRecoveries}× since the relay started'
+                      '${state.linkHealth.lastRecoveryAt == null ? '' : ', last at ${TimeOfDay.fromDateTime(state.linkHealth.lastRecoveryAt!).format(context)}'}.',
+                      style: text.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           if (model != null || firmware != null) ...[
             const SizedBox(height: 8),
             Text(
