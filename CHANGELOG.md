@@ -1,3 +1,14 @@
+## Unreleased
+
+### Example app
+
+- Notifications stay on until you stop them. The relay remembers that you
+  turned it on and resumes by itself after a phone restart, an app update,
+  Android ending it in the background, a temporary notification-listener
+  disconnect, or a stuck command. Stopping it, or turning off notification
+  access, still turns it off for good. Activity shows each automatic resume
+  and why.
+
 ## 0.2.1
 
 ### Package

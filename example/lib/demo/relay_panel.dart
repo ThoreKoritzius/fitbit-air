@@ -507,10 +507,14 @@ class RelayPanel extends StatelessWidget {
       'cancelled' => 'Cancelled before execution',
       'duplicate' => 'Duplicate suppressed',
       'interrupted' => 'Interrupted; delivery uncertain',
+      'resumed' => 'Notifications resumed automatically',
       _ => 'Command failed',
     };
     final packageName = entry['sourcePackage'];
-    final source = packageName == null
+    final resumed = stage == 'resumed';
+    final source = resumed
+        ? 'Air Relay'
+        : packageName == null
         ? 'Test vibration'
         : controller.apps
                   .where((app) => app['packageName'] == packageName)
@@ -542,7 +546,9 @@ class RelayPanel extends StatelessWidget {
         '${detailed ? "detail" : "activity"}-${entry['commandId']}-$stage',
       ),
       leading: Icon(
-        stage == 'verified'
+        resumed
+            ? Icons.restart_alt
+            : stage == 'verified'
             ? Icons.check_circle_outline
             : stage == 'failed' || stage == 'interrupted'
             ? Icons.error_outline
@@ -558,6 +564,7 @@ class RelayPanel extends StatelessWidget {
                 'failed' || 'interrupted' => 'Not confirmed',
                 'combined' || 'merged' => 'Combined',
                 'paused' || 'quiet_hours' => 'Quiet',
+                'resumed' => 'Resumed automatically',
                 _ => 'Skipped',
               }}$signalPart · $time',
       ),
@@ -582,7 +589,9 @@ class RelayPanel extends StatelessWidget {
                     Text('$title$signalPart · $time'),
                     const SizedBox(height: 16),
                     Text(
-                      code != null
+                      resumed
+                          ? resumedExplanation(entry['commandId'] as String?)
+                          : code != null
                           ? DemoController.recoveryHint(code)
                           : stage == 'verified'
                           ? 'Your Air acknowledged the vibration command.'
@@ -599,4 +608,18 @@ class RelayPanel extends StatelessWidget {
             ),
     );
   }
+}
+
+/// Why the relay came back on its own, from the history entry's fixed label.
+String resumedExplanation(String? commandId) {
+  final reason = commandId?.split('-').elementAtOrNull(1);
+  final cause = switch (reason) {
+    'restart' => 'after your phone restarted',
+    'update' => 'after Air Relay was updated',
+    'listener' => 'after Android reconnected notification access',
+    'process' => 'after Android closed Air Relay in the background',
+    'watchdog' => 'after a stuck command',
+    _ => 'after an interruption',
+  };
+  return 'You left notifications on, so Air Relay turned them back on $cause. Tap Stop if you want them off.';
 }

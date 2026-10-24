@@ -230,11 +230,13 @@ class MainActivity : FlutterActivity() {
                                 result.error("NOTIFICATION_ACCESS", "Enable notification access and wait for connection first.", null)
                             } else {
                                 require(RelayRuleStore.read(this).selectedPackages.isNotEmpty()) { "Select at least one app first." }
+                                RelayAutoResume.setWanted(this, true)
                                 CalendarRelayService.start(this)
                                 result.success(null)
                             }
                         }
                         "stop" -> {
+                            RelayAutoResume.setWanted(this, false)
                             CalendarRelayService.stop()
                             result.success(null)
                         }
