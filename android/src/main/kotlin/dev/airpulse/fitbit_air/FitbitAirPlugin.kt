@@ -14,7 +14,10 @@ import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
@@ -65,6 +68,15 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
     private var channelMonitor: AirChannelMonitor? = null
     private var warmLink: AirWarmLink? = null
     private var usingWarmLink = false
+    /** The host asked to keep a warm link; rebuilt after it fails or Bluetooth restarts. */
+    private var warmLinkWanted = false
+    private var warmLinkWatchdog: Runnable? = null
+    private var adapterReceiver: BroadcastReceiver? = null
+    private var lastWarmLinkRebuild = 0L
+    private var operationCallback: BluetoothGattCallback? = null
+    private var sessionRxPackets = 0
+    private var warmSilenceCheck: Runnable? = null
+    private var warmLinkFallback: String? = null
     private var heartRateEvents: EventChannel.EventSink? = null
     private var heartRateStreamGeneration = 0
     private var activity: Activity? = null
@@ -347,18 +359,14 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
             "keepLinkWarm" -> {
                 val enabled = call.argument<Boolean>("enabled") == true
                 if (!enabled) {
-                    warmLink?.close()
-                    warmLink = null
+                    stopWarmLink()
                     result.success(null)
                 } else withBluetoothPermission(result) {
                     val device = findBondedAir()
                     if (device == null) {
                         result.error("AIR_NOT_FOUND", "Pair your Air in Google Health first.", null)
                     } else {
-                        if (warmLink?.address != device.address) {
-                            warmLink?.close()
-                            warmLink = AirWarmLink(appContext).also { it.start(device) }
-                        }
+                        startWarmLink(device)
                         result.success(null)
                     }
                 }
@@ -609,6 +617,7 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
                     return@dispatch
                 }
                 if (c.uuid == TRACKER_RX) {
+                    sessionRxPackets++
                     channelActivity?.record(SystemClock.elapsedRealtime(), value.size)
                     rxSource?.receiveData(value)?.subscribe({}, { finishError("RX", it.message ?: "Receive failed.") })
                 }
@@ -624,6 +633,7 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
                         return@dispatch
                     }
                     if (Build.VERSION.SDK_INT < 33 && c.uuid == TRACKER_RX) {
+                        sessionRxPackets++
                         channelActivity?.record(SystemClock.elapsedRealtime(), value.size)
                         rxSource?.receiveData(value)?.subscribe({}, { finishError("RX", it.message ?: "Receive failed.") })
                     }
@@ -661,11 +671,13 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
                 }
             }
         }
+        operationCallback = callback
+        warmLinkFallback = null
         val warm = warmLink
         val usesSession = operation != Operation.ReadDeviceInfo && operation != Operation.ReadHeartRate &&
             operation != Operation.ReadSignalStrength
         if (usesSession && warm != null && warm.isSettled(SystemClock.elapsedRealtime()) &&
-            warm.address == device.address) {
+            warm.address == device.address && warm.refreshSubscription()) {
             // Already connected and subscribed: skip setup and decide from known traffic.
             val connection = warm.gatt!!
             warm.delegate = callback
@@ -678,6 +690,11 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
             handler.post { if (gatt === connection) holdWhileChannelBusy(connection, device) }
             return
         }
+        connectFresh(device, callback)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun connectFresh(device: BluetoothDevice, callback: BluetoothGattCallback) {
         val connection = try {
             device.connectGatt(appContext, false, callback, BluetoothDevice.TRANSPORT_LE)
         } catch (error: Exception) {
@@ -689,6 +706,97 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
         } else {
             gatt = connection
         }
+    }
+
+    /**
+     * The warm link reported ready but delivered nothing since the handshake
+     * started, although the Air answers a Gattlink reset within about a
+     * second (and Google Health's traffic would also arrive). Android can keep
+     * such a client connected without routing notifications to it; every
+     * command on it then times out. No device command has been sent yet, so
+     * the same operation continues on a fresh connection, and the warm link is
+     * rebuilt afterwards.
+     */
+    private fun abandonSilentWarmLink(device: BluetoothDevice) {
+        val callback = operationCallback ?: return
+        android.util.Log.d("FitbitAir", "warm link silent; reconnecting")
+        warmLinkFallback = "silent"
+        handshakeDeadline?.let(handler::removeCallbacks)
+        handshakeDeadline = null
+        try {
+            disposeSession()
+        } catch (error: Exception) {
+            finishError("GOLDENGATE", "Could not reset the secure session.")
+            return
+        }
+        val stale = warmLink
+        warmLink = null
+        stale?.close()
+        gatt = null
+        usingWarmLink = false
+        linkBoosted = false
+        handshakeAttempts = 0
+        connectFresh(device, callback)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun startWarmLink(device: BluetoothDevice) {
+        warmLinkWanted = true
+        if (warmLink?.address != device.address) {
+            warmLink?.close()
+            warmLink = AirWarmLink(appContext).also { it.start(device) }
+            lastWarmLinkRebuild = SystemClock.elapsedRealtime()
+        }
+        if (adapterReceiver == null) {
+            // Connections made before Bluetooth was switched off never come back.
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    when (intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1)) {
+                        BluetoothAdapter.STATE_TURNING_OFF, BluetoothAdapter.STATE_OFF -> {
+                            if (warmLink?.gatt !== gatt) { warmLink?.close(); warmLink = null }
+                        }
+                        BluetoothAdapter.STATE_ON -> handler.postDelayed({ rebuildWarmLink("bluetooth_on") }, 1_000L)
+                    }
+                }
+            }
+            appContext.registerReceiver(receiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
+            adapterReceiver = receiver
+        }
+        if (warmLinkWatchdog == null) {
+            val watchdog = object : Runnable {
+                override fun run() {
+                    if (!warmLinkWanted) return
+                    val now = SystemClock.elapsedRealtime()
+                    val link = warmLink
+                    if (link == null || (link.isStuck(now) && now - lastWarmLinkRebuild >= WARM_REBUILD_MIN_MS)) {
+                        rebuildWarmLink(if (link == null) "missing" else "stuck")
+                    }
+                    handler.postDelayed(this, WARM_WATCHDOG_MS)
+                }
+            }
+            warmLinkWatchdog = watchdog
+            handler.postDelayed(watchdog, WARM_WATCHDOG_MS)
+        }
+    }
+
+    /** Replaces the warm link unless a command is using it. */
+    private fun rebuildWarmLink(reason: String) {
+        if (!warmLinkWanted || pendingResult != null) return
+        val device = findBondedAir() ?: return
+        android.util.Log.d("FitbitAir", "warm link rebuilt: $reason")
+        warmLink?.close()
+        warmLink = null
+        startWarmLink(device)
+    }
+
+    private fun stopWarmLink() {
+        warmLinkWanted = false
+        warmLinkWatchdog?.let(handler::removeCallbacks)
+        warmLinkWatchdog = null
+        adapterReceiver?.let { runCatching { appContext.unregisterReceiver(it) } }
+        adapterReceiver = null
+        warmLink?.close()
+        warmLink = null
     }
 
     @SuppressLint("MissingPermission")
@@ -925,6 +1033,14 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
             }
             handshakeDeadline = deadline
             handler.postDelayed(deadline, HANDSHAKE_RETRY_MS)
+            sessionRxPackets = 0
+            warmSilenceCheck?.let(handler::removeCallbacks)
+            warmSilenceCheck = if (!usingWarmLink) null else Runnable {
+                warmSilenceCheck = null
+                if (endpoint === coap && !sessionStarted && usingWarmLink && sessionRxPackets == 0) {
+                    abandonSilentWarmLink(device)
+                }
+            }.also { handler.postDelayed(it, WARM_SILENCE_MS) }
             newStack.start()
         } catch (error: UnsatisfiedLinkError) {
             // No bundled library for this device's ABI, or it failed to load.
@@ -1405,6 +1521,11 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
         timeout = null
         handshakeDeadline?.let(handler::removeCallbacks)
         handshakeDeadline = null
+        warmSilenceCheck?.let(handler::removeCallbacks)
+        warmSilenceCheck = null
+        warmLinkFallback?.let { trace.note("warmLinkFallback", it) }
+        warmLinkFallback = null
+        operationCallback = null
         holdTick?.let(handler::removeCallbacks)
         holdTick = null
         channelActivity?.let { channelHoldOutcome = it.outcome(SystemClock.elapsedRealtime()) }
@@ -1435,6 +1556,9 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
         }
         usingWarmLink = false
         AirTransportLease.release(transportOwner)
+        if (warmLinkWanted && warmLink == null) {
+            handler.postDelayed({ if (warmLink == null) rebuildWarmLink("after_fallback") }, 1_000L)
+        }
         if (record) AirTransportDiagnostics.record(cleanupOperation ?: "Scan", trace.snapshot())
         cleanupOperation = null
     }
@@ -1452,8 +1576,7 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
         channelActivityChannel.setStreamHandler(null)
         channelMonitor?.close()
         channelMonitor = null
-        warmLink?.close()
-        warmLink = null
+        stopWarmLink()
         diagnosticEvents = null
         eventMonitor?.close()
         eventMonitor = null
@@ -1482,6 +1605,10 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
         private const val OPERATION_TIMEOUT_MS = 45_000L
         private const val HANDOFF_TIMEOUT_MS = 10_000L
         private const val HANDSHAKE_RETRY_MS = 6_000L
+        /** A working link delivers the Air's Gattlink answer within about a second. */
+        private const val WARM_SILENCE_MS = 2_000L
+        private const val WARM_WATCHDOG_MS = 60_000L
+        private const val WARM_REBUILD_MIN_MS = 300_000L
         private const val HOLD_TICK_MS = 100L
         private const val LOST_RACE_RETRY_MS = 1_500L
         /** DTLS error observed when Google Health answered the same handshake. */
