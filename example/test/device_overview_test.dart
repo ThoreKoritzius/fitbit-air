@@ -40,7 +40,7 @@ void main() {
         );
         expect(find.text('Fitbit Air'), findsOneWidget);
         expect(find.text('15%'), findsOneWidget);
-        expect(find.text('No active link'), findsOneWidget);
+        expect(find.text('Not connected'), findsOneWidget);
         expect(find.textContaining('-67 dBm'), findsOneWidget);
         expect(tester.takeException(), isNull);
       },

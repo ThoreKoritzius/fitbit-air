@@ -187,4 +187,22 @@ void main() {
     expect(state.firmwareWorks, isFalse);
     expect(state.showFirmwareNotice, isTrue);
   });
+
+  test('every status has a visual level', () {
+    expect(RelayStatus.fromController(state).level, StatusLevel.idle);
+    state
+      ..relayRunning = true
+      ..relayReady = false;
+    expect(RelayStatus.fromController(state).level, StatusLevel.busy);
+    state.relayReady = true;
+    expect(RelayStatus.fromController(state).level, StatusLevel.active);
+    state.settings = const RelaySettings(silenceReason: 'paused');
+    expect(RelayStatus.fromController(state).level, StatusLevel.quiet);
+    state
+      ..settings = const RelaySettings()
+      ..airConnected = false;
+    expect(RelayStatus.fromController(state).level, StatusLevel.warning);
+    state.bluetoothEnabled = false;
+    expect(RelayStatus.fromController(state).level, StatusLevel.problem);
+  });
 }

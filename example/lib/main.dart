@@ -10,6 +10,8 @@ import 'package:flutter/services.dart';
 import 'demo/demo_controller.dart';
 import 'demo/app_theme.dart';
 import 'demo/relay_panel.dart';
+import 'demo/relay_status.dart';
+import 'demo/status_style.dart';
 import 'demo/rules_panel.dart';
 import 'demo/wrist_presence_card.dart';
 import 'demo/setup_page.dart';
@@ -300,6 +302,29 @@ class _DemoPageState extends State<DemoPage> with WidgetsBindingObserver {
       ),
     ),
   );
+
+  /// Home carries a dot when alerts may not arrive or setup needs a fix.
+  Widget _homeDestination(BuildContext context) {
+    final level = RelayStatus.fromController(_controller).level;
+    final flagged =
+        level == StatusLevel.warning || level == StatusLevel.problem;
+    final color = StatusStyle.of(context, level).foreground;
+    Widget icon(IconData data) => flagged
+        ? Badge(
+            key: const ValueKey('nav-relay-badge'),
+            smallSize: 9,
+            backgroundColor: color,
+            child: Icon(data),
+          )
+        : Icon(data);
+    return NavigationDestination(
+      key: const ValueKey('nav-relay'),
+      icon: icon(Icons.notifications_outlined),
+      selectedIcon: icon(Icons.notifications_active),
+      label: 'Home',
+      tooltip: flagged ? 'Home, needs attention' : null,
+    );
+  }
 
   Widget _madeWithLove(BuildContext context) => Semantics(
     key: const ValueKey('about-credit'),
@@ -1386,20 +1411,15 @@ class _DemoPageState extends State<DemoPage> with WidgetsBindingObserver {
                 setState(() => _destination = [0, 3, 1][index]);
                 _controller.setDeviceVisible(index == 2);
               },
-              destinations: const [
-                NavigationDestination(
-                  key: ValueKey('nav-relay'),
-                  icon: Icon(Icons.notifications_outlined),
-                  selectedIcon: Icon(Icons.notifications_active),
-                  label: 'Home',
-                ),
-                NavigationDestination(
+              destinations: [
+                _homeDestination(context),
+                const NavigationDestination(
                   key: ValueKey('nav-rules'),
                   icon: Icon(Icons.tune_outlined),
                   selectedIcon: Icon(Icons.tune),
                   label: 'Rules',
                 ),
-                NavigationDestination(
+                const NavigationDestination(
                   key: ValueKey('nav-device'),
                   icon: Icon(Icons.watch_outlined),
                   selectedIcon: Icon(Icons.watch),

@@ -12,6 +12,7 @@ void main() {
   const device = MethodChannel('fitbit_air');
   var access = false;
   var running = false;
+  var bluetoothOn = true;
   bool? readyOverride;
   var stopping = false;
   var failStart = false;
@@ -36,6 +37,7 @@ void main() {
   late Map<String, Object?> rules;
 
   setUp(() {
+    bluetoothOn = true;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
           const MethodChannel('fitbit_air/connection'),
@@ -96,7 +98,7 @@ void main() {
                 'selectedApps': selected,
                 'pulseStyle': pulseStyle,
                 'rules': {...rules, 'defaultPreset': pulseStyle},
-                'bluetoothEnabled': true,
+                'bluetoothEnabled': bluetoothOn,
                 'bluetoothPermission': true,
                 'history': history,
                 'conversations': conversations,
@@ -1094,6 +1096,20 @@ void main() {
     await tap(tester, 'message-tone-confirm');
     expect(calls, contains('saveToneRules'));
     expect(controller.settings.toneEnabled, isTrue);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('Home tab carries a dot only when something needs attention', (
+    tester,
+  ) async {
+    access = true;
+    await mount(tester);
+    expect(find.byKey(const ValueKey('nav-relay-badge')), findsNothing);
+    bluetoothOn = false;
+    await controller.refresh(force: true);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('nav-relay-badge')), findsWidgets);
+    expect(find.byKey(const ValueKey('status-badge-problem')), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 }

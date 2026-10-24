@@ -9,6 +9,7 @@ import 'relay_status.dart';
 import 'relay_toggle_button.dart';
 import 'air_status_strip.dart';
 import 'setup_page.dart';
+import 'status_style.dart';
 
 class RelayPanel extends StatelessWidget {
   const RelayPanel({
@@ -130,6 +131,11 @@ class RelayPanel extends StatelessWidget {
         !state.setupCompleted && !displayedRunning && !transitioning;
     final needsFix = status.recovery != RelayRecovery.none;
     final attention = needsFix || status.attention;
+    final level = transitioning
+        ? StatusLevel.busy
+        : needsSetup
+        ? StatusLevel.idle
+        : status.level;
     final paused = displayedRunning && state.settings.silenceReason == 'paused';
     final title = needsSetup
         ? 'Finish setup'
@@ -178,29 +184,10 @@ class RelayPanel extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 12),
           child: Column(
             children: [
-              AnimatedContainer(
-                duration: MediaQuery.disableAnimationsOf(context)
-                    ? Duration.zero
-                    : const Duration(milliseconds: 180),
-                width: 88,
-                height: 88,
-                decoration: BoxDecoration(
-                  color: displayedRunning
-                      ? colors.primaryContainer.withValues(alpha: .6)
-                      : colors.surfaceContainerHighest,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  paused
-                      ? Icons.pause
-                      : attention && !needsSetup
-                      ? Icons.error_outline
-                      : Icons.watch_outlined,
-                  size: 40,
-                  color: displayedRunning
-                      ? colors.primary
-                      : colors.onSurfaceVariant,
-                ),
+              StatusEmblem(
+                key: const ValueKey('relay-emblem'),
+                level: level,
+                paused: paused,
               ),
               const SizedBox(height: 12),
               Text(
@@ -231,7 +218,14 @@ class RelayPanel extends StatelessWidget {
                     : state.selectedAppsSummary,
                 key: const ValueKey('relay-status-detail'),
                 textAlign: TextAlign.center,
-                style: TextStyle(color: colors.onSurfaceVariant),
+                style: TextStyle(
+                  color:
+                      (level == StatusLevel.warning ||
+                              level == StatusLevel.problem) &&
+                          !needsSetup
+                      ? StatusStyle.of(context, level).foreground
+                      : colors.onSurfaceVariant,
+                ),
               ),
               AirStatusStrip(controller: state),
               if (paused)

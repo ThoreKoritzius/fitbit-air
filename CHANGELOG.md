@@ -1,3 +1,25 @@
+## Unreleased
+
+### Package
+
+- Fix commands failing after ~22 s with `HANDSHAKE_TIMEOUT` while the warm
+  link stayed connected but no longer received the Air's notifications. The
+  warm link re-registers before each command; if a command on it still hears
+  nothing within 2 s, it continues on a fresh connection (the vibration then
+  arrives ~2.5 s later instead of failing), reported as
+  `warmLinkFallback: silent`. The warm link is rebuilt after such a fallback,
+  when Bluetooth is switched back on, on a service change, and when it stays
+  disconnected for 2 minutes, so the relay no longer needs a restart.
+
+### Example app
+
+- One status language on every screen: the Air emblem with a badge and color
+  per state (teal ready, neutral off, moon/pause for quiet, amber triangle
+  for alerts that may not arrive, red for something to fix, a ring while
+  starting). Home's tab carries a dot when something needs attention, the
+  connection chip turns amber when the Air isn't connected, and the Device
+  header follows the connection. Reduced motion replaces the spinner.
+
 ## 0.2.0
 
 ### Package
