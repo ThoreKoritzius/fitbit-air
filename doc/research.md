@@ -548,3 +548,60 @@ Other candidates—notifications, alarms, battery alerts, sync status, and the
 ping characteristic—must be traced and tested individually. They should not be
 added to the stable Dart surface until their payload, side effects, credential
 requirements, cleanup, and Google Health coexistence are verified.
+
+## Status light and the settings surface (2026-11-03)
+
+Driving the status light from the phone was the goal; it is not reachable.
+Measured on a CPH2569 (Android 15), Air firmware 67.20001.253.2, Google
+Health paired and working throughout.
+
+**Observed.** A fixed GET allowlist of 122 paths was read in one secure
+session. `/md/606` answered `2.05` with 79 bytes. `liveactivity`, `/alarms`,
+`/sync/status` and `/time` answered `4.01`. `/sync/response` and `/settings`
+answered `4.05`. Everything else answered `4.04`, including `/led`, `/leds`,
+`/light`, `/display`, `/screen`, `/ui`, `/device`, `/status`,
+`/notification`, `/notifications`, and every `/md/600`–`/md/699` except 606.
+
+**Conclusion.** The light has no resource. Resources that exist behind
+Google Health's credentials answer `4.01` rather than `4.04`, so the
+light-shaped names are absent from the routing table for this filter group,
+not merely refused to an unauthenticated peer.
+
+**Observed.** `/settings` refuses GET, so its selectors were enumerated with
+the selector-only PUT body the haptic read already uses, `0a 01 NN`, which
+carries no value to assign. Of selectors 2–127, exactly one answered:
+selector 2 returned `0a 04 12 02 08 00`, the shape of the haptics reply one
+field across. Selectors 3–127 answered `4.00`. Selector 1 was not probed,
+being haptics.
+
+**Observed.** Selector 2 was written to 1, read back as 1, held two seconds
+and restored to 0, verified, twice. No vibration and no light on either run,
+with the Air worn. Google Health continued to sync afterwards.
+
+**Conclusion.** The device exposes two settings within a one-byte selector,
+and only haptics has a side effect on the device. Haptics is usable precisely
+because *changing* it makes the Air buzz; setting 2 offers no equivalent, so
+there is nothing to borrow for a light or any other output.
+
+**Hypothesis, untested.** Selectors above 127 would need a two-byte varint
+and a different message shape, and were not swept. Identifying setting 2
+without writing to it looks possible by toggling the Air's own options in
+Google Health and re-reading the selector; that was not needed once the
+toggle proved inert.
+
+`/sync/response` is deliberately left alone. It is write-only and carries the
+sync protocol, so probing it means sending messages of unknown shape into the
+mechanism that moves activity and sleep data; unlike a selector carrying no
+value, no bounded version of that probe was available.
+
+## Who is calling (2026-11-03)
+
+**Observed.** On the same phone and firmware, `Notification.CallStyle`
+notifications carry
+a `Person` in `android.callPerson`. The Google dialer's `Person` has a
+`content://com.android.contacts/...` lookup URI and a display name, and no
+key. WhatsApp's has a display name only: no URI, no key, nothing dialable.
+
+**Conclusion.** A dialer call can be attributed to a contact by resolving the
+lookup URI to a number, which survives the contact being renamed. A WhatsApp
+call can only be attributed by display name, which does not.
