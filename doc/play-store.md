@@ -76,6 +76,10 @@ Data the app *accesses* but does not collect, to explain if asked:
 ## Before submitting
 
 - **Release build:** build with your release key (see [release.md](release.md)) as an App Bundle.
-- **Lab tools:** hide them in the Play build. Research tools such as event observation and resource probes can look like device probing to a reviewer.
+- **Developer tools:** the Play bundle is built with
+  `--dart-define=AIR_RELAY_STORE=true` (the release workflow does this), which
+  removes Device → Developer tools and the wrist-presence trial. The GitHub APK
+  keeps them. Build locally with
+  `flutter build appbundle --release --dart-define=AIR_RELAY_STORE=true`.
 - **Testing:** new personal developer accounts must run a closed test with at least 12 testers for 14 days before production access.
 - **Authorization:** the question about Google's terms for third-party connections to the Air is still open. Consider asking Google first.

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:fitbit_air_example/build_flavor.dart';
 import 'package:fitbit_air_example/demo/demo_controller.dart';
 import 'package:fitbit_air_example/demo/relay_settings.dart';
 import 'package:fitbit_air_example/main.dart';
@@ -684,6 +685,16 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('store build has no Developer tools', (tester) async {
+    access = true;
+    running = true;
+    await mount(tester);
+    await tap(tester, 'nav-device');
+    expect(find.byKey(const ValueKey('nav-lab')), findsNothing);
+    expect(find.text('Developer tools'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  }, skip: !kStoreBuild);
+
   testWidgets('switching to Lab never silently stops the relay', (
     tester,
   ) async {
@@ -696,7 +707,7 @@ void main() {
     expect(calls, isNot(contains('stop')));
     expect(controller.relayRunning, isTrue);
     await tester.pumpWidget(const SizedBox());
-  });
+  }, skip: kStoreBuild);
 
   testWidgets('exclusive actions require an explicit relay stop', (
     tester,
