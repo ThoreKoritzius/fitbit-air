@@ -53,6 +53,56 @@ void main() {
     expect(result.verified, isTrue);
   });
 
+  test('ring sends its pacing and reports the pulses posted', () async {
+    Object? arguments;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          arguments = call.arguments;
+          return {'pulses': 6, 'restored': true};
+        });
+    final result = await FitbitAir.ring(
+      intensity: HapticIntensity.high,
+      gap: const Duration(milliseconds: 650),
+      maximum: const Duration(seconds: 45),
+    );
+    expect(arguments, {
+      'intensity': 3,
+      'gapMillis': 650,
+      'maxMillis': 45000,
+    });
+    expect(result.pulses, 6);
+    expect(result.restored, isTrue);
+  });
+
+  test('a bounded ring carries its pulse count', () async {
+    Object? arguments;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          arguments = call.arguments;
+          return {'pulses': 2, 'restored': true};
+        });
+    // Two pulses at one strength, rather than a strength flip whose two
+    // pulses are necessarily different strengths.
+    final result = await FitbitAir.ring(
+      gap: const Duration(milliseconds: 300),
+      maximum: const Duration(seconds: 20),
+      pulses: 2,
+    );
+    expect((arguments! as Map)['pulses'], 2);
+    expect(result.pulses, 2);
+  });
+
+  test('stopRing asks the device to stop without arguments', () async {
+    String? method;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          method = call.method;
+          return null;
+        });
+    await FitbitAir.stopRing();
+    expect(method, 'stopRing');
+  });
+
   test('returns a verified tap at the retained strength', () async {
     String? method;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
