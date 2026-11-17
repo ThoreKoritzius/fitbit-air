@@ -20,6 +20,10 @@ same Android phone in the installed Google Health app.
 
 ## Air Relay
 
+<a href="https://play.google.com/store/apps/details?id=dev.airpulse.airrelay">
+  <img src="doc/images/air-relay-play-feature-graphic.png" alt="Fitbit Air Notifier (Air Relay): choose which phone notifications reach your Fitbit Air, with message filters and gentle vibration alerts" width="1024">
+</a>
+
 <img src="doc/images/air-relay-home.png" alt="Air Relay home screen showing notifications on, connection and battery status, and recent activity" width="280" align="right">
 
 The [example](example/) is **Air Relay**, a complete Android app built on this
@@ -38,7 +42,8 @@ package: it turns phone notifications into a gentle vibration on your Fitbit Air
 
 <br clear="right">
 
-Download the signed APK from [GitHub releases](https://github.com/ThoreKoritzius/fitbit-air/releases)
+Download **[Fitbit Air Notifier on Google Play](https://play.google.com/store/apps/details?id=dev.airpulse.airrelay)**.
+You can also get the signed APK from [GitHub releases](https://github.com/ThoreKoritzius/fitbit-air/releases)
 (verify it with the `.sha256` file), or build it yourself: connect an Android
 phone with the Air already paired in Google Health, then:
 
