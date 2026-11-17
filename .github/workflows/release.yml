@@ -44,7 +44,8 @@ jobs:
           AIR_RELAY_KEY_PASSWORD: ${{ secrets.AIR_RELAY_KEY_PASSWORD }}
         run: |
           flutter build apk --release
-          flutter build appbundle --release
+          # The Play build leaves out Developer tools (see doc/play-store.md).
+          flutter build appbundle --release --dart-define=AIR_RELAY_STORE=true
       - name: Check the signature
         run: |
           APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)

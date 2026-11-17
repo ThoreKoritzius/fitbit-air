@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'build_flavor.dart';
 import 'demo/demo_controller.dart';
 import 'demo/app_theme.dart';
 import 'demo/relay_panel.dart';
@@ -207,10 +208,11 @@ class _DemoPageState extends State<DemoPage> with WidgetsBindingObserver {
 
   void _registerActions() {
     _controller.actions.addAll({
-      'openLab': DemoAction(() {
-        _controller.setDeviceVisible(false);
-        setState(() => _destination = 2);
-      }, exclusive: false),
+      if (!kStoreBuild)
+        'openLab': DemoAction(() {
+          _controller.setDeviceVisible(false);
+          setState(() => _destination = 2);
+        }, exclusive: false),
       'previewDefault': DemoAction(
         () => _controller.previewPreset(_controller.settings.defaultPreset),
         exclusive: false,
@@ -1376,23 +1378,25 @@ class _DemoPageState extends State<DemoPage> with WidgetsBindingObserver {
                               children: _destination == 1
                                   ? [
                                       ..._deviceChildren(),
-                                      const SizedBox(height: 24),
-                                      WristPresenceCard(
-                                        observation:
-                                            _controller.lastWristObservation,
-                                      ),
-                                      const SizedBox(height: 12),
-                                      OutlinedButton.icon(
-                                        key: const ValueKey('nav-lab'),
-                                        onPressed: () {
-                                          _controller.setDeviceVisible(false);
-                                          setState(() => _destination = 2);
-                                        },
-                                        icon: const Icon(
-                                          Icons.science_outlined,
+                                      if (!kStoreBuild) ...[
+                                        const SizedBox(height: 24),
+                                        WristPresenceCard(
+                                          observation:
+                                              _controller.lastWristObservation,
                                         ),
-                                        label: const Text('Developer tools'),
-                                      ),
+                                        const SizedBox(height: 12),
+                                        OutlinedButton.icon(
+                                          key: const ValueKey('nav-lab'),
+                                          onPressed: () {
+                                            _controller.setDeviceVisible(false);
+                                            setState(() => _destination = 2);
+                                          },
+                                          icon: const Icon(
+                                            Icons.science_outlined,
+                                          ),
+                                          label: const Text('Developer tools'),
+                                        ),
+                                      ],
                                     ]
                                   : _labChildren(),
                             ),
