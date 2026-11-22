@@ -84,8 +84,7 @@ internal object RelayRuleStore {
 
     @Synchronized fun update(context: Context, change: (RelayRuleConfig) -> RelayRuleConfig) {
         val next = change(read(context))
-        require(next.apps.size <= 128 && next.chats.size <= 64)
-        require(next.selectedPackages.size <= 64)
+        require(next.chats.size <= 64)
         require(next.defaultPreset != RelayPreset.MUTE)
         require(next.apps.keys.all { it != context.packageName && it.matches(Regex("[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+")) })
         write(context, next)

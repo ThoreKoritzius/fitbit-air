@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fitbit_air/fitbit_air.dart';
 import 'app_icon.dart';
+import 'app_selection_buttons.dart';
 import 'demo_controller.dart';
 
 Future<void> showRelaySetup(
@@ -394,6 +395,11 @@ class _RelaySetupPageState extends State<RelaySetupPage> {
                           ),
                       ],
                       if (step == 2) ...[
+                        AppSelectionButtons(
+                          controller: state,
+                          blocked: blocked,
+                          perform: (action) => run(action),
+                        ),
                         TextField(
                           key: const ValueKey('setup-app-search'),
                           decoration: const InputDecoration(

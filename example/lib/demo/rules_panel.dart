@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'demo_controller.dart';
 import 'app_icon.dart';
+import 'app_selection_buttons.dart';
 import 'conversation_picker.dart';
 import 'relay_settings.dart';
 import 'vibration_editor.dart';
@@ -115,6 +116,11 @@ class _RulesPanelState extends State<RulesPanel> {
           ],
         ),
         const SizedBox(height: 12),
+        AppSelectionButtons(
+          controller: state,
+          blocked: state.changingRelay,
+          perform: widget.perform,
+        ),
         TextFormField(
           key: const ValueKey('app-search'),
           initialValue: state.appSearch,
