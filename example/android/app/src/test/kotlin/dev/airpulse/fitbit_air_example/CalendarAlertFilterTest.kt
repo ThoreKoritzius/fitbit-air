@@ -31,10 +31,9 @@ class CalendarAlertFilterTest {
         assertTrue(filter.accept(calendar, "different-key", 2_000, 2_010, false, false))
     }
 
-    @Test fun boundedSessionNeverEvictsKeysAndReplaysOldAlerts() {
+    @Test fun newAlertsStillWorkAfter256KeysWithoutReplayingActiveAlerts() {
         val filter = CalendarAlertFilter(1_000)
-        repeat(256) { assertTrue(filter.accept(calendar, "key-$it", 1_001, 1_010, false, false)) }
-        assertFalse(filter.accept(calendar, "overflow", 1_001, 1_010, false, false))
+        repeat(512) { assertTrue(filter.accept(calendar, "key-$it", 1_001, 1_010, false, false)) }
         assertFalse(filter.accept(calendar, "key-0", 1_001, 1_010, false, false))
     }
 
@@ -64,11 +63,26 @@ class CalendarAlertFilterTest {
         assertFalse(filter.accept("com.whatsapp", "old-message", 2_000, 2_010, false, false, 900))
     }
 
-    @Test fun knownChatUpdatesStillWorkWhenTheKeyLimitIsReached() {
+    @Test fun knownChatUpdatesStillWorkAlongsideMoreThan256Keys() {
         val filter = CalendarAlertFilter(1_000, selectedPackages = setOf("com.whatsapp"))
         repeat(256) { assertTrue(filter.accept("com.whatsapp", "key-$it", 1_001, 1_010, false, false, 1_001)) }
-        assertFalse(filter.accept("com.whatsapp", "overflow", 2_000, 2_010, false, false, 2_000))
+        assertTrue(filter.accept("com.whatsapp", "overflow", 2_000, 2_010, false, false, 2_000))
         assertTrue(filter.accept("com.whatsapp", "key-0", 2_000, 2_010, false, false, 2_000))
     }
 
+    @Test fun startupSnapshotSuppressesUpdatesBeyond256Keys() {
+        val existing = (0 until 512).associate { "key-$it" to null }
+        val filter = CalendarAlertFilter(1_000, existing)
+        assertFalse(filter.accept(calendar, "key-511", 2_000, 2_010, false, false))
+        assertTrue(filter.accept(calendar, "new", 2_000, 2_010, false, false))
+    }
+
+    @Test fun removedKeyCanBeReusedForANewNotification() {
+        val filter = CalendarAlertFilter(1_000)
+        assertTrue(filter.accept(calendar, "reused", 1_001, 1_010, false, false))
+        filter.onRemoved("reused")
+        assertFalse(filter.accept(calendar, "reused", 1_001, 31_001, false, false))
+        assertTrue(filter.accept(calendar, "reused", 31_001, 31_010, false, false))
+        assertFalse(filter.accept(calendar, "reused", 31_002, 31_010, false, false))
+    }
 }

@@ -6,7 +6,12 @@ internal class CalendarAlertFilter(
     existingKeys: Map<String, Long?> = emptyMap(),
     private val selectedPackages: Set<String> = setOf("com.google.android.calendar")
 ) {
-    private val seen = existingKeys.entries.take(256).associate { it.key to it.value }.toMutableMap()
+    // Keep each key until Android reports that its notification was removed.
+    private val seen = existingKeys.toMutableMap()
+
+    fun onRemoved(key: String) {
+        seen.remove(key)
+    }
 
     fun accept(packageName: String, key: String, postedAt: Long, now: Long,
                ongoing: Boolean, summary: Boolean, messageTimestamp: Long? = null): Boolean {
@@ -16,7 +21,7 @@ internal class CalendarAlertFilter(
             // Messaging apps reuse chat IDs. Only a strictly newer message can buzz again.
             val previous = seen[key]
             if (messageTimestamp == null || messageTimestamp <= (previous ?: (startedAt - 1))) return false
-        } else if (seen.size >= 256) return false
+        }
         if (messageTimestamp != null && messageTimestamp < startedAt) return false
         seen[key] = messageTimestamp
         return true
