@@ -247,6 +247,10 @@ class CalendarRelayService : Service() {
         submit(packageName, postedAt, match)
     }
 
+    internal fun onAlertRemoved(key: String) {
+        filter?.onRemoved(key)
+    }
+
     internal fun testPulse(preset: String? = null, completion: ((RelayWorkerResult) -> Unit)? = null) {
         check(ready && !stopping) { "Wait until the relay is listening." }
         val config = RelayRuleStore.read(this)

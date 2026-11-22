@@ -56,6 +56,10 @@ class CalendarNotificationListener : NotificationListenerService() {
         )
     }
 
+    override fun onNotificationRemoved(sbn: StatusBarNotification) {
+        CalendarRelayService.active?.onAlertRemoved(sbn.key)
+    }
+
     companion object {
         private var instance: CalendarNotificationListener? = null
 
