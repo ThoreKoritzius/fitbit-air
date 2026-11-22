@@ -7,6 +7,45 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('Rules offers BuzzKill setup when Tasker is installed', (
+    tester,
+  ) async {
+    final controller = DemoController();
+    addTearDown(controller.dispose);
+
+    Future<void> renderRules() => tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RulesPanel(controller: controller, perform: (_) {}),
+        ),
+      ),
+    );
+
+    await renderRules();
+    final setup = find.text('BuzzKill via Tasker');
+    expect(setup, findsNothing);
+
+    controller.apps = [
+      {'packageName': 'net.dinglisch.android.taskerm', 'label': 'Tasker'},
+    ];
+    await renderRules();
+    await tester.scrollUntilVisible(
+      setup,
+      100,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(setup.hitTestable());
+    await tester.pumpAndSettle();
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is SelectableText &&
+            (widget.data?.contains('%TIMEMS') ?? false),
+      ),
+      findsOneWidget,
+    );
+    expect(controller.selectedApps, isNot(contains('net.dinglisch.android.taskerm')));
+  });
+
   for (final brightness in Brightness.values) {
     testWidgets('relay controls fit a phone in ${brightness.name} mode', (
       tester,

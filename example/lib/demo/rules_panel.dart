@@ -99,6 +99,40 @@ class _RulesPanelState extends State<RulesPanel> {
         ),
         const SizedBox(height: 12),
         ..._toneRules(context, state, widget.perform),
+        if (state.apps.any(
+          (app) => app['packageName'] == 'net.dinglisch.android.taskerm',
+        ))
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.bolt_outlined),
+            title: const Text('BuzzKill via Tasker'),
+            subtitle: const Text('Set up a vibration for a BuzzKill rule'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => showDialog<void>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('BuzzKill via Tasker'),
+                content: const SingleChildScrollView(
+                  child: SelectableText(
+                    '1. In Tasker, create a task with a Notify action. Use '
+                    '“Air Relay trigger” as the title and %TIMEMS as the text. '
+                    'Leave Permanent off.\n\n'
+                    '2. Enable Allow External Access in Tasker. In BuzzKill, '
+                    'choose Trigger Tasker and select your task.\n\n'
+                    '3. Turn on Tasker under Your apps and start the relay. '
+                    'Turn off direct relay rules for apps handled by BuzzKill '
+                    'to avoid duplicate vibrations.',
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Done'),
+                  ),
+                ],
+              ),
+            ),
+          ),
         const SizedBox(height: 24),
         Wrap(
           spacing: 12,
