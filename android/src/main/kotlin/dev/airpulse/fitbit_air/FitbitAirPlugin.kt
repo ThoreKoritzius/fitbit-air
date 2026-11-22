@@ -62,6 +62,9 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
     private var secureCaptureSeconds = 30
     private var diagnosticEvents: EventChannel.EventSink? = null
     private var eventMonitor: AirEventMonitor? = null
+    private lateinit var finderChannel: EventChannel
+    private var finder: AirFinder? = null
+    private var finderGeneration = 0
     private lateinit var connectionChannel: EventChannel
     private var connectionWatcher: AirConnectionWatcher? = null
     private lateinit var channelActivityChannel: EventChannel
@@ -215,6 +218,29 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
                     activeOperation = null
                     closeTransport()
                 }
+            }
+        })
+        finderChannel = EventChannel(binding.binaryMessenger, "fitbit_air/finder")
+        finderChannel.setStreamHandler(object : EventChannel.StreamHandler {
+            override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
+                finder?.close()
+                finder = null
+                val generation = ++finderGeneration
+                withBluetoothPermission(streamPermissionResult(events)) {
+                    if (generation != finderGeneration) return@withBluetoothPermission
+                    val device = findBondedAir()
+                    if (device == null) {
+                        events.error("AIR_NOT_FOUND", "Pair your Air in Google Health first.", null)
+                        events.endOfStream()
+                    } else {
+                        finder = AirFinder(appContext, device, events).also { it.start() }
+                    }
+                }
+            }
+            override fun onCancel(arguments: Any?) {
+                finderGeneration++
+                finder?.close()
+                finder = null
             }
         })
         connectionChannel = EventChannel(binding.binaryMessenger, "fitbit_air/connection")
@@ -1566,6 +1592,10 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        finderGeneration++
+        finderChannel.setStreamHandler(null)
+        finder?.close()
+        finder = null
         channel.setMethodCallHandler(null)
         secureEventChannel.setStreamHandler(null)
         secureEvents = null

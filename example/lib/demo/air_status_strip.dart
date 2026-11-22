@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'demo_controller.dart';
 import 'status_style.dart';
+import 'finder_page.dart';
 
 /// Cached observations, clearly separate from the relay's on/off state.
 class AirStatusStrip extends StatelessWidget {
@@ -130,6 +131,18 @@ class AirStatusStrip extends StatelessWidget {
               ),
               onPressed: () => showDetails(context, state),
             ),
+          ),
+          TextButton.icon(
+            key: const ValueKey('home-find-my-air'),
+            onPressed: state.initialized
+                ? () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => FinderPage(controller: state),
+                    ),
+                  )
+                : null,
+            icon: const Icon(Icons.radar, size: 18),
+            label: const Text('Find my Air'),
           ),
         ],
       ),

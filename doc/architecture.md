@@ -97,6 +97,21 @@ subscription before another operation; concurrent requests receive `BUSY`.
 Cancelling a read does not disable other apps' CCCD subscriptions. Cancelling
 a haptic write is rejected so its verification/restore sequence can finish.
 
+## Find my Air signal path
+
+`FitbitAir.watchProximity()` uses a dedicated `AirFinder` GATT client for the
+already bonded device. It connects directly and calls Android's remote RSSI
+read about once a second. It does not scan, discover services, subscribe to a
+characteristic, enter the secure transport, or write to the tracker. RSSI is
+smoothed for presentation, while each event also carries its raw reading.
+
+The stream emits a searching state after stale or failed readings and clears
+its smoothing history on reconnect. Connection attempts are time-bounded and
+retries are spaced out. Cancelling the stream or detaching the Flutter engine
+closes the GATT client. The Air Relay example stops the stream in the background
+and starts it again when the finder screen resumes. RSSI is a relative signal
+indicator, not distance or direction; see [finder limitations](finder.md).
+
 ## Notification command dispatch
 
 `fitbit_air_commands.dart` is a provider-neutral Dart helper. A bounded queue

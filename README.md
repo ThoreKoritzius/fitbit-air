@@ -78,6 +78,31 @@ dependencies:
 the Google Health app. The plugin declares the Bluetooth permissions; on
 Android 12+ the user is asked for Nearby devices access on first use.
 
+## Architecture
+
+The Dart API keeps Bluetooth and Fitbit's private transport details behind the
+Android plugin boundary:
+
+```text
+Flutter app / Air Relay
+        │ typed Dart API and bounded haptic queue
+        ▼ MethodChannel / EventChannels
+Android plugin
+  ├─ secure Golden Gate / CoAP / DTLS path for haptic commands
+  ├─ standard GATT streams and reads for device status and heart rate
+  └─ separate read-only GATT RSSI stream for Find my Air
+        ▼
+   Fitbit Air
+```
+
+In the example app, Android's notification listener hands events to a
+service-owned Flutter worker. Local app, conversation, message, tone and quiet
+hour rules decide what is relayed; accepted alerts pass through the bounded
+dispatcher before reaching the SDK. Notification contents stay on the phone.
+The finder opens its own read-only connection while its screen is active and
+does not scan, write to the Air or use the secure channel. See the detailed
+[architecture notes](doc/architecture.md).
+
 ## Use
 
 ```dart
@@ -155,6 +180,30 @@ final rssi = await FitbitAir.readSignalStrength(); // e.g. -67 dBm
 `readBattery()` opens a short secure session (a few seconds) that waits while
 Google Health is syncing, so read it on demand rather than polling frequently.
 Connection events and signal strength do not touch the secure channel.
+
+### Find a nearby Air
+
+`FitbitAir.watchProximity()` emits fresh raw and smoothed Bluetooth signal
+readings for the already paired Air. Cancel the subscription when the finder
+screen closes or the app goes into the background:
+
+```dart
+final finder = FitbitAir.watchProximity().listen((reading) {
+  if (reading.hasSignal) {
+    print('${reading.rssi} dBm; UI strength ${reading.strength}');
+  } else {
+    // Searching: discard any previously displayed signal.
+  }
+});
+await finder.cancel();
+```
+
+The Android implementation uses a separate read-only GATT connection and polls
+RSSI about once a second. It does not scan, discover services or use the secure
+channel, so it can run alongside the notification relay. Nearby devices
+permission is required; no location permission is requested. Signal strength
+is affected by walls, bodies and phone orientation; it does not show calibrated
+distance or direction. See [finder behavior and limitations](doc/finder.md).
 
 ### Handle errors
 

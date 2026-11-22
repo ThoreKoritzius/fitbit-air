@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'air_status_strip.dart';
 import 'demo_controller.dart';
 import 'relay_status.dart';
+import 'finder_page.dart';
 import 'status_style.dart';
 
 class DeviceOverview extends StatelessWidget {
@@ -96,6 +97,19 @@ class DeviceOverview extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 24),
+          FilledButton.tonalIcon(
+            key: const ValueKey('find-my-air'),
+            onPressed: state.bluetoothPermission
+                ? () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => FinderPage(controller: state),
+                    ),
+                  )
+                : null,
+            icon: const Icon(Icons.radar),
+            label: const Text('Find my Air'),
+          ),
+          const SizedBox(height: 16),
           const Divider(height: 1),
           const SizedBox(height: 16),
           LayoutBuilder(

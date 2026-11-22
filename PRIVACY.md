@@ -1,6 +1,6 @@
 # Air Relay privacy policy
 
-Last updated: 2026-10-20
+Last updated: 2026-11-17
 
 Air Relay is an independent Android app that turns selected phone
 notifications into vibrations on your Fitbit Air. It is not affiliated with
@@ -60,3 +60,11 @@ Air Relay is not directed at children under 13.
 Changes to this policy are published in this file, with the date above.
 Questions: open an issue at
 https://github.com/ThoreKoritzius/fitbit-air/issues.
+
+## Find my Air
+
+The optional finder reads the paired Air's Bluetooth signal strength while its
+screen is open. Signal readings and timestamps are kept in memory only (up to
+300 updates for the copyable signal report). It does not use GPS or upload
+location information. **Copy signal report** places those readings on the
+clipboard only when you request it. Closing the finder discards the report.

@@ -101,6 +101,26 @@ class FitbitAir {
   static Future<int> readSignalStrength() async =>
       (await _invokeMap('readSignalStrength'))['rssi']! as int;
 
+  /// Live proximity of the paired Air, sampled about once a second on Android.
+  ///
+  /// Opens a dedicated read-only Bluetooth connection, without service discovery
+  /// or secure-channel commands. Can coexist with the notification relay. It
+  /// reconnects while searching; a searching event invalidates prior readings.
+  /// Requires Bluetooth connect permission, not scan or location permission.
+  /// Cancel when the finder is hidden to release its connection. One subscriber
+  /// per Flutter engine; share the stream if multiple widgets need updates.
+  /// Signal strength is affected by walls, bodies and phone orientation and is
+  /// not a calibrated distance measurement or direction.
+  static Stream<AirFinderReading> watchProximity() =>
+      const EventChannel('fitbit_air/finder')
+          .receiveBroadcastStream()
+          .map(
+            (value) => AirFinderReading.fromMap(
+              Map<String, Object?>.from(value as Map),
+            ),
+          )
+          .handleError(_streamError('Finder failed.'));
+
   /// Keeps a listen-only Bluetooth link to the Air open while [enabled].
   ///
   /// Useful for apps that send commands on demand, such as a notification
@@ -612,4 +632,32 @@ class FitbitAirException implements Exception {
 
   @override
   String toString() => 'FitbitAirException($code): $message';
+}
+
+/// A live finder update. Searching updates intentionally contain no old signal.
+class AirFinderReading {
+  const AirFinderReading({
+    required this.receivedAt,
+    this.rssi,
+    this.smoothedRssi,
+  });
+  factory AirFinderReading.fromMap(Map<String, Object?> map) =>
+      AirFinderReading(
+        receivedAt: DateTime.fromMillisecondsSinceEpoch(
+          map['receivedAtMillis']! as int,
+        ),
+        rssi: map['state'] == 'signal' ? map['rssi'] as int? : null,
+        smoothedRssi: map['state'] == 'signal'
+            ? (map['smoothedRssi'] as num?)?.toDouble()
+            : null,
+      );
+  final DateTime receivedAt;
+  final int? rssi;
+  final double? smoothedRssi;
+  bool get hasSignal => rssi != null && smoothedRssi != null;
+
+  /// Normalized signal strength for a UI, not a probability or distance.
+  double? get strength => smoothedRssi == null
+      ? null
+      : ((smoothedRssi! + 100) / 60).clamp(0.0, 1.0);
 }
