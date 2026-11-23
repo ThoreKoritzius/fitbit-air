@@ -78,6 +78,11 @@ dependencies:
 the Google Health app. The plugin declares the Bluetooth permissions; on
 Android 12+ the user is asked for Nearby devices access on first use.
 
+## iOS prototype
+
+This branch adds an experimental iOS backend for `FitbitAir.tap()` and a small
+Flutter probe with a Shortcuts action. See [iOS build and hardware checks](doc/ios-prototype.md).
+
 ## Architecture
 
 The Dart API keeps Bluetooth and Fitbit's private transport details behind the

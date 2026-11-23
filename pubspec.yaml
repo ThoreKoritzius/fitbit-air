@@ -37,3 +37,5 @@ flutter:
       android:
         package: dev.airpulse.fitbit_air
         pluginClass: FitbitAirPlugin
+      ios:
+        pluginClass: FitbitAirPlugin
