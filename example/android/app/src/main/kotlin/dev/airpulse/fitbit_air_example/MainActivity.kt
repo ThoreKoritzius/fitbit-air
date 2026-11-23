@@ -150,6 +150,11 @@ class MainActivity : FlutterActivity() {
                             RelayRuleStore.update(this) { it.copy(silence = it.silence.copy(quietEnabled = enabled, startMinute = start, endMinute = end)) }
                             result.success(null)
                         }
+                        "setOnlyWhileAsleep" -> {
+                            val enabled = requireNotNull(call.argument<Boolean>("enabled"))
+                            RelayRuleStore.update(this) { it.copy(silence = it.silence.copy(onlyWhileAsleep = enabled)) }
+                            result.success(null)
+                        }
                         "saveToneRules" -> {
                             val enabled = requireNotNull(call.argument<Boolean>("enabled"))
                             fun preset(key: String) = call.argument<String>(key)?.let { RelayPreset.parse(it) }

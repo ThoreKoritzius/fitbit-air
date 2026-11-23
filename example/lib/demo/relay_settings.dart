@@ -61,6 +61,7 @@ class RelaySettings {
     this.everyoneElseSilent = false,
     this.pauseUntil = 0,
     this.quietEnabled = false,
+    this.onlyWhileAsleep = false,
     this.startMinute = 1320,
     this.endMinute = 420,
     this.silenceReason,
@@ -77,6 +78,7 @@ class RelaySettings {
   final bool everyoneElseSilent;
   final int pauseUntil;
   final bool quietEnabled;
+  final bool onlyWhileAsleep;
   final int startMinute;
   final int endMinute;
   final String? silenceReason;
@@ -112,6 +114,7 @@ class RelaySettings {
       everyoneElseSilent: map['everyoneElseSilent'] == true,
       pauseUntil: map['pauseUntil'] as int? ?? 0,
       quietEnabled: map['quietEnabled'] == true,
+      onlyWhileAsleep: map['onlyWhileAsleep'] == true,
       startMinute: map['startMinute'] as int? ?? 1320,
       endMinute: map['endMinute'] as int? ?? 420,
       silenceReason: map['silenceReason'] as String?,

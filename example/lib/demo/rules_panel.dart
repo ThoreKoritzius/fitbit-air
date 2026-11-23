@@ -99,6 +99,19 @@ class _RulesPanelState extends State<RulesPanel> {
           onTap: () => editQuietHours(context, state),
         ),
         const SizedBox(height: 12),
+        SwitchListTile(
+          key: const ValueKey('only-while-asleep'),
+          contentPadding: EdgeInsets.zero,
+          secondary: const Icon(Icons.screen_lock_portrait),
+          title: const Text('Only relay while the phone is asleep'),
+          subtitle: const Text('Skip notifications while the phone is awake.'),
+          value: state.settings.onlyWhileAsleep,
+          onChanged: state.changingRelay
+              ? null
+              : (enabled) => widget.perform(
+                  () => state.setOnlyWhileAsleep(enabled),
+                ),
+        ),
         ..._toneRules(context, state, widget.perform),
         const SizedBox(height: 24),
         Text('Your apps', style: Theme.of(context).textTheme.titleLarge),

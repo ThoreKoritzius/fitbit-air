@@ -53,7 +53,8 @@ internal object RelayRuleStore {
                 SavedChat(chat.getString("packageName"), chat.getString("label"), chat.getString("kind"),
                     if (chat.isNull("preset")) null else RelayPreset.parse(chat.getString("preset")))
             },
-            RelaySilence(quiet.getLong("pauseUntil"), quiet.getBoolean("quietEnabled"), quiet.getInt("startMinute"), quiet.getInt("endMinute")),
+            RelaySilence(quiet.getLong("pauseUntil"), quiet.getBoolean("quietEnabled"), quiet.getInt("startMinute"), quiet.getInt("endMinute"),
+                quiet.optBoolean("onlyWhileAsleep")),
             RelayToneRules(tone?.getBoolean("enabled") ?: false, tonePreset("urgent"), tonePreset("negative"), tonePreset("neutral")),
             if (version == 1) legacy!!.second else json.getBoolean("everyoneElseSilent"),
         )
@@ -71,7 +72,8 @@ internal object RelayRuleStore {
         val json = JSONObject().put("version", 2).put("defaultPreset", config.defaultPreset.id)
             .put("apps", apps).put("chats", chats).put("everyoneElseSilent", config.everyoneElseSilent)
             .put("silence", JSONObject().put("pauseUntil", s.pauseUntil).put("quietEnabled", s.quietEnabled)
-                .put("startMinute", s.startMinute).put("endMinute", s.endMinute))
+                .put("startMinute", s.startMinute).put("endMinute", s.endMinute)
+                .put("onlyWhileAsleep", s.onlyWhileAsleep))
         val t = config.tone
         json.put("tone", JSONObject().put("enabled", t.enabled).put("urgent", t.urgent?.id ?: JSONObject.NULL)
             .put("negative", t.negative?.id ?: JSONObject.NULL).put("neutral", t.neutral?.id ?: JSONObject.NULL))
@@ -102,6 +104,7 @@ internal object RelayRuleStore {
             "everyoneElseSilent" to c.everyoneElseSilent,
             "pauseUntil" to c.silence.pauseUntil, "quietEnabled" to c.silence.quietEnabled,
             "startMinute" to c.silence.startMinute, "endMinute" to c.silence.endMinute,
+            "onlyWhileAsleep" to c.silence.onlyWhileAsleep,
             "silenceReason" to c.silence.reason(System.currentTimeMillis()),
             "toneEnabled" to c.tone.enabled, "toneUrgent" to c.tone.urgent?.id,
             "toneNegative" to c.tone.negative?.id, "toneNeutral" to c.tone.neutral?.id)
