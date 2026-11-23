@@ -715,8 +715,20 @@ class DemoController extends ChangeNotifier {
   Future<void> selectApp(String packageName, bool selected) async {
     final packages = {...selectedApps};
     selected ? packages.add(packageName) : packages.remove(packageName);
-    await _relayCall('selectApps', {'packages': packages.toList()});
+    await _saveSelectedApps(packages);
   }
+
+  Future<void> selectAllApps(bool selected) => _saveSelectedApps(
+    selected
+        ? {
+            ...selectedApps,
+            for (final app in apps) app['packageName']! as String,
+          }
+        : <String>{},
+  );
+
+  Future<void> _saveSelectedApps(Set<String> packages) =>
+      _relayCall('selectApps', {'packages': packages.toList()});
 
   Future<void> setPulseStyle(String style) async {
     if (style != 'double' && style != 'single') {

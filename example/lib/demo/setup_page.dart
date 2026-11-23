@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fitbit_air/fitbit_air.dart';
 import 'app_icon.dart';
+import 'app_selection_buttons.dart';
 import 'demo_controller.dart';
 
 Future<void> showRelaySetup(
@@ -402,7 +403,11 @@ class _RelaySetupPageState extends State<RelaySetupPage> {
                           ),
                           onChanged: (value) => setState(() => query = value),
                         ),
-                        const SizedBox(height: 12),
+                        AppSelectionButtons(
+                          controller: state,
+                          blocked: blocked,
+                          perform: (action) => run(action),
+                        ),
                         for (final app in apps)
                           SwitchListTile(
                             key: ValueKey('setup-app-${app['packageName']}'),
