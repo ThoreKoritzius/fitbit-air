@@ -8,7 +8,19 @@ public final class FitbitAirPlugin: NSObject, FlutterPlugin {
     }
 
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-        guard call.method == "tap" else {
+        switch call.method {
+        case "iosNotificationAutomation":
+            if #available(iOS 27.0, *) { result(true) } else { result(false) }
+            return
+        case "openIosShortcuts":
+            Task { @MainActor in
+                guard let url = URL(string: "shortcuts://") else { result(false); return }
+                result(await UIApplication.shared.open(url))
+            }
+            return
+        case "tap":
+            break
+        default:
             result(FlutterMethodNotImplemented)
             return
         }

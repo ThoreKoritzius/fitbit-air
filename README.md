@@ -80,8 +80,8 @@ Android 12+ the user is asked for Nearby devices access on first use.
 
 ## iOS prototype
 
-This branch adds an experimental iOS backend for `FitbitAir.tap()` and a small
-Flutter probe with a Shortcuts action. See [iOS build and hardware checks](doc/ios-prototype.md).
+This branch adds an experimental iOS backend for `FitbitAir.tap()` and an iOS
+runner for Air Relay with a Shortcuts action. See [iOS build and hardware checks](doc/ios-prototype.md).
 
 ## Architecture
 
