@@ -2,7 +2,20 @@ package dev.airpulse.fitbit_air_example
 
 /** Match only explicitly selected rule IDs. No inspection of sender-message history. */
 internal object RelayConversationPolicy {
-    val packages = setOf("com.whatsapp", "com.whatsapp.w4b")
+    val whatsappPackages = setOf("com.whatsapp", "com.whatsapp.w4b")
+    val otherApps = mapOf(
+        "com.google.android.apps.dynamite" to setOf("chat", "google chat"),
+        "org.telegram.messenger" to setOf("telegram"),
+        "org.telegram.messenger.web" to setOf("telegram"),
+        "com.google.android.apps.messaging" to setOf("messages", "google messages"),
+    )
+    val packages = whatsappPackages + otherApps.keys
+
+    fun isAppTitle(packageName: String, title: String): Boolean {
+        val generic = if (packageName in whatsappPackages) setOf("whatsapp", "whatsapp business")
+            else otherApps[packageName].orEmpty()
+        return title.trim().lowercase() in generic
+    }
 
     fun accepts(packageName: String, restricted: Boolean, allowed: Set<String>, id: String?): Boolean =
         packageName !in packages || !restricted || (id != null && id in allowed)
@@ -23,7 +36,7 @@ internal object RelayConversationIdentity {
             result += ConversationIdentity(hash("$packageName\u0000$shortcut"), "shortcut")
         }
         if (messaging && !title.isNullOrBlank() && title.length <= 512 &&
-            title.lowercase() !in setOf("whatsapp", "whatsapp business")) {
+            !RelayConversationPolicy.isAppTitle(packageName, title)) {
             result += ConversationIdentity(hash("name\u0000$packageName\u0000$title"), "name")
         }
         return result

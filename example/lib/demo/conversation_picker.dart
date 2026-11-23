@@ -23,12 +23,11 @@ class ConversationPicker extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       key: const ValueKey('conversation-picker'),
       leading: const Icon(Icons.people_outline),
-      title: const Text('WhatsApp people'),
+      title: const Text('People & chats'),
       subtitle: Text(
-        settings.chats.isEmpty && !settings.everyoneElseSilent
-            ? 'All chats vibrate · Add people for their own vibration'
-            : '${settings.chats.length} saved · Everyone else '
-                  '${settings.everyoneElseSilent ? 'silent' : 'vibrates'}',
+        settings.chats.isEmpty
+            ? 'Give individual conversations their own vibration'
+            : '${settings.chats.length} saved · Manage chat vibrations',
       ),
       trailing: const Icon(Icons.chevron_right),
       onTap: () => Navigator.of(context).push(
@@ -61,7 +60,7 @@ Future<void> _attempt(
 
 String _details(SavedChat chat, String vibration) => [
   vibration,
-  if (chat.business) 'Business',
+  chat.appName,
   if (chat.nameMatch) 'Matched by name',
 ].join(' · ');
 
@@ -121,17 +120,27 @@ class _PeoplePage extends StatelessWidget {
       final state = controller;
       final settings = state.settings;
       final busy = state.changingRelay;
-      final whatsappOn = state.selectedApps.any(_whatsappPackages.contains);
+      final installedChatApps = state.apps.where(
+        (app) => chatAppNames.containsKey(app['packageName']),
+      );
+      final disabledChatApps = installedChatApps.where(
+        (app) =>
+            !state.selectedApps.contains(app['packageName']) &&
+            settings.chats.any(
+              (chat) => chat.packageName == app['packageName'],
+            ),
+      );
+      final otherChatApps = installedChatApps.where(
+        (app) => !_whatsappPackages.contains(app['packageName']),
+      );
       return Scaffold(
-        appBar: AppBar(title: const Text('WhatsApp people')),
+        appBar: AppBar(title: const Text('People & chats')),
         body: ListView(
           padding: const EdgeInsets.all(20),
           children: [
-            if (!whatsappOn) ...[
-              const Text('WhatsApp notifications are off in your app rules.'),
-              for (final app in state.apps.where(
-                (app) => _whatsappPackages.contains(app['packageName']),
-              ))
+            if (disabledChatApps.isNotEmpty) ...[
+              const Text('Enable the source app to use its saved chat rules.'),
+              for (final app in disabledChatApps)
                 Align(
                   alignment: Alignment.centerLeft,
                   child: TextButton(
@@ -178,7 +187,7 @@ class _PeoplePage extends StatelessWidget {
             SwitchListTile(
               key: const ValueKey('everyone-else'),
               contentPadding: EdgeInsets.zero,
-              title: const Text('Everyone else'),
+              title: const Text('Other WhatsApp chats'),
               subtitle: Text(
                 !settings.everyoneElseSilent
                     ? 'Vibrates with the app vibration'
@@ -212,10 +221,40 @@ class _PeoplePage extends StatelessWidget {
               icon: const Icon(Icons.person_add_outlined),
               label: const Text('Add person or group'),
             ),
+            if (otherChatApps.isNotEmpty)
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: const Text('Other chats by app'),
+                subtitle: const Text(
+                  'Choose which apps relay only saved chats',
+                ),
+                children: [
+                  for (final app in otherChatApps)
+                    SwitchListTile(
+                      key: ValueKey('unsaved-chats-${app['packageName']}'),
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(chatAppNames[app['packageName']]!),
+                      subtitle: const Text('Only relay saved chats'),
+                      value: settings.silentChatApps.contains(
+                        app['packageName'],
+                      ),
+                      onChanged: busy
+                          ? null
+                          : (silent) => _attempt(
+                              context,
+                              state,
+                              () => state.setOtherChatsSilent(
+                                app['packageName']! as String,
+                                silent,
+                              ),
+                            ),
+                    ),
+                ],
+              ),
             const SizedBox(height: 24),
             Text(
               'A group rule applies to everyone in that group. Chat names stay on this phone.'
-              '${settings.chats.any((chat) => chat.nameMatch) ? ' "Matched by name" means WhatsApp gave no chat ID, so the exact chat name is used: renaming the chat stops matching, and another chat with the same name matches too.' : ''}',
+              '${settings.chats.any((chat) => chat.nameMatch) ? ' "Matched by name" means the app gave no chat ID, so the exact chat name is used: renaming the chat stops matching, and another chat with the same name matches too.' : ''}',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
@@ -225,7 +264,7 @@ class _PeoplePage extends StatelessWidget {
   );
 }
 
-/// Lists chats from WhatsApp notifications and keeps listening for a minute.
+/// Lists chats from messaging notifications and keeps listening for a minute.
 class _AddChatSheet extends StatefulWidget {
   const _AddChatSheet({required this.controller});
   final DemoController controller;
@@ -266,7 +305,9 @@ class _AddChatSheetState extends State<_AddChatSheet> {
       final saved = {for (final chat in state.settings.chats) chat.id: chat};
       final found = state.conversationCandidates
           .where(
-            (chat) => chat.label.toLowerCase().contains(query.toLowerCase()),
+            (chat) => '${chat.label} ${chat.appName}'.toLowerCase().contains(
+              query.trim().toLowerCase(),
+            ),
           )
           .toList();
       final listening = state.captureRemainingMillis > 0;
@@ -298,7 +339,7 @@ class _AddChatSheetState extends State<_AddChatSheet> {
               children: [
                 if (!_canListen) ...[
                   const Text(
-                    'Chats are found from WhatsApp notifications, so this needs notification access.',
+                    'Chats are found from messaging notifications, so this needs notification access.',
                   ),
                   TextButton(
                     onPressed: state.openAccessSettings,
@@ -376,14 +417,12 @@ class _AddChatSheetState extends State<_AddChatSheet> {
                       key: ValueKey('candidate-${chat.id}'),
                       contentPadding: EdgeInsets.zero,
                       title: Text(chat.label),
-                      subtitle: chat.business || chat.nameMatch
-                          ? Text(
-                              [
-                                if (chat.business) 'Business',
-                                if (chat.nameMatch) 'Matched by name',
-                              ].join(' · '),
-                            )
-                          : null,
+                      subtitle: Text(
+                        [
+                          chat.appName,
+                          if (chat.nameMatch) 'Matched by name',
+                        ].join(' · '),
+                      ),
                       trailing: FilledButton.tonal(
                         key: ValueKey('add-${chat.id}'),
                         onPressed: state.changingRelay
@@ -437,11 +476,11 @@ class _AddChatSheetState extends State<_AddChatSheet> {
       return 'Android could not read some notification details. Turn notification access off and on again.';
     }
     if ((stats['seen'] ?? 0) == 0) {
-      return 'No WhatsApp notifications arrived. Check that WhatsApp notifications are on, then listen again.';
+      return 'No chat notifications arrived. Check that notifications are on for the messaging app, then listen again.';
     }
     if ((stats['unusable'] ?? 0) > 0) {
-      return 'WhatsApp notifications arrived without chat details. Check WhatsApp’s notification privacy settings and try a direct message.';
+      return 'Notifications arrived without chat details. Check the messaging app’s notification privacy settings and try a direct message.';
     }
-    return 'Only summary or ongoing notifications arrived. Open WhatsApp, leave the chat, then receive a new message.';
+    return 'Only summary or ongoing notifications arrived. Leave the chat, then receive a new message.';
   }
 }

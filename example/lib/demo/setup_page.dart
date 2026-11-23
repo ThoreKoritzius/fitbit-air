@@ -316,7 +316,7 @@ class _RelaySetupPageState extends State<RelaySetupPage> {
                               ? 'Allowed'
                               : state.access
                               ? 'Waiting for Android to connect'
-                              : 'Find alerts from your chosen apps and WhatsApp people.',
+                              : 'Find alerts from your chosen apps and saved chats.',
                           access,
                         ),
                         const Divider(height: 1),

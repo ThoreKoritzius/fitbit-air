@@ -1,6 +1,7 @@
 package dev.airpulse.fitbit_air_example
 
 import android.content.Context
+import org.json.JSONArray
 import org.json.JSONObject
 
 /** Versioned, app-private settings. Chat identities never enter reports or backups. */
@@ -37,6 +38,11 @@ internal object RelayRuleStore {
         val quiet = json.getJSONObject("silence")
         // Configs saved before message tone existed decode with it switched off.
         val tone = json.optJSONObject("tone")
+        val silentChatApps = json.optJSONArray("silentChatApps")?.let { apps ->
+            (0 until apps.length()).mapNotNull { index ->
+                apps.optString(index).takeIf { it in RelayConversationPolicy.otherApps }
+            }.toSet()
+        }.orEmpty()
         fun tonePreset(key: String) = if (tone == null || tone.isNull(key)) null else RelayPreset.parse(tone.getString(key))
         return RelayRuleConfig(
             RelayPreset.parse(json.getString("defaultPreset")),
@@ -57,6 +63,7 @@ internal object RelayRuleStore {
                 quiet.optBoolean("onlyWhileAsleep")),
             RelayToneRules(tone?.getBoolean("enabled") ?: false, tonePreset("urgent"), tonePreset("negative"), tonePreset("neutral")),
             if (version == 1) legacy!!.second else json.getBoolean("everyoneElseSilent"),
+            silentChatApps,
         )
     }
 
@@ -71,6 +78,7 @@ internal object RelayRuleStore {
         val s = config.silence
         val json = JSONObject().put("version", 2).put("defaultPreset", config.defaultPreset.id)
             .put("apps", apps).put("chats", chats).put("everyoneElseSilent", config.everyoneElseSilent)
+            .put("silentChatApps", JSONArray(config.silentChatApps.sorted()))
             .put("silence", JSONObject().put("pauseUntil", s.pauseUntil).put("quietEnabled", s.quietEnabled)
                 .put("startMinute", s.startMinute).put("endMinute", s.endMinute)
                 .put("onlyWhileAsleep", s.onlyWhileAsleep))
@@ -102,6 +110,7 @@ internal object RelayRuleStore {
                     "preset" to chat.preset?.id)
             },
             "everyoneElseSilent" to c.everyoneElseSilent,
+            "silentChatApps" to c.silentChatApps.toList(),
             "pauseUntil" to c.silence.pauseUntil, "quietEnabled" to c.silence.quietEnabled,
             "startMinute" to c.silence.startMinute, "endMinute" to c.silence.endMinute,
             "onlyWhileAsleep" to c.silence.onlyWhileAsleep,

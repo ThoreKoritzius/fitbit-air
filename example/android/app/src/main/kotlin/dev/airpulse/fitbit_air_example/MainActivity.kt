@@ -130,6 +130,15 @@ class MainActivity : FlutterActivity() {
                             RelayRuleStore.update(this) { it.copy(everyoneElseSilent = silent) }
                             result.success(null)
                         }
+                        "setOtherChatsSilent" -> {
+                            val pkg = requireNotNull(call.argument<String>("packageName"))
+                            require(pkg in RelayConversationPolicy.otherApps)
+                            val silent = requireNotNull(call.argument<Boolean>("silent"))
+                            RelayRuleStore.update(this) {
+                                it.copy(silentChatApps = if (silent) it.silentChatApps + pkg else it.silentChatApps - pkg)
+                            }
+                            result.success(null)
+                        }
                         "saveDefaultPreset" -> {
                             val preset = RelayPreset.parse(requireNotNull(call.argument<String>("preset")))
                             RelayRuleStore.update(this) { it.copy(defaultPreset = preset) }

@@ -4,6 +4,16 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class RelayConversationPolicyTest {
+    @Test fun matchingTitlesAndShortcutsStaySeparateAcrossMessagingApps() {
+        val packages = listOf("com.whatsapp", "com.google.android.apps.dynamite",
+            "org.telegram.messenger", "com.google.android.apps.messaging")
+        val matches = packages.map { RelayConversationIdentity.options(it, "thread-7", "Alice", true) }
+        assertTrue(matches.all { it.map { match -> match.kind } == listOf("shortcut", "name") })
+        assertEquals(8, matches.flatten().map { it.id }.toSet().size)
+        assertTrue(RelayConversationIdentity.options("org.telegram.messenger", null, "Telegram", true).isEmpty())
+        assertTrue(RelayConversationIdentity.options("com.google.android.gm", "thread-7", "Alice", true).isEmpty())
+    }
+
     @Test fun unrestrictedModePreservesExistingAppsIncludingMissingMetadata() {
         for (pkg in listOf("com.whatsapp", "com.whatsapp.w4b", "com.google.android.calendar")) {
             assertTrue(RelayConversationPolicy.accepts(pkg, false, emptySet(), null))

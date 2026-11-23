@@ -26,7 +26,16 @@ class AppNotificationRule {
   final VibrationPreset? preset;
 }
 
-/// A WhatsApp chat saved on this phone. [preset] null uses the app vibration.
+const chatAppNames = {
+  'com.whatsapp': 'WhatsApp',
+  'com.whatsapp.w4b': 'WhatsApp Business',
+  'com.google.android.apps.dynamite': 'Google Chat',
+  'org.telegram.messenger': 'Telegram',
+  'org.telegram.messenger.web': 'Telegram',
+  'com.google.android.apps.messaging': 'Google Messages',
+};
+
+/// A chat saved on this phone. [preset] null uses the app vibration.
 class SavedChat {
   const SavedChat({
     required this.id,
@@ -39,10 +48,10 @@ class SavedChat {
   final String label;
   final String packageName;
 
-  /// Matched by exact chat name because WhatsApp gave no conversation ID.
+  /// Matched by exact chat name because the app gave no conversation ID.
   final bool nameMatch;
   final VibrationPreset? preset;
-  bool get business => packageName == 'com.whatsapp.w4b';
+  String get appName => chatAppNames[packageName] ?? 'Messaging app';
 
   factory SavedChat.fromMap(Map map) => SavedChat(
     id: map['id'] as String,
@@ -59,6 +68,7 @@ class RelaySettings {
     this.apps = const {},
     this.chats = const [],
     this.everyoneElseSilent = false,
+    this.silentChatApps = const {},
     this.pauseUntil = 0,
     this.quietEnabled = false,
     this.onlyWhileAsleep = false,
@@ -76,6 +86,7 @@ class RelaySettings {
 
   /// Only saved WhatsApp chats may vibrate.
   final bool everyoneElseSilent;
+  final Set<String> silentChatApps;
   final int pauseUntil;
   final bool quietEnabled;
   final bool onlyWhileAsleep;
@@ -112,6 +123,9 @@ class RelaySettings {
           SavedChat.fromMap(chat as Map),
       ],
       everyoneElseSilent: map['everyoneElseSilent'] == true,
+      silentChatApps: (map['silentChatApps'] as List? ?? const [])
+          .whereType<String>()
+          .toSet(),
       pauseUntil: map['pauseUntil'] as int? ?? 0,
       quietEnabled: map['quietEnabled'] == true,
       onlyWhileAsleep: map['onlyWhileAsleep'] == true,
