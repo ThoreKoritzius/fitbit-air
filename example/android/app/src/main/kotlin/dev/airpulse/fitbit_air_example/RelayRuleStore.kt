@@ -37,6 +37,7 @@ internal object RelayRuleStore {
         val quiet = json.getJSONObject("silence")
         // Configs saved before message tone existed decode with it switched off.
         val tone = json.optJSONObject("tone")
+        val calls = json.optJSONObject("calls")
         fun tonePreset(key: String) = if (tone == null || tone.isNull(key)) null else RelayPreset.parse(tone.getString(key))
         return RelayRuleConfig(
             RelayPreset.parse(json.getString("defaultPreset")),
@@ -57,6 +58,8 @@ internal object RelayRuleStore {
                 quiet.optBoolean("onlyWhileAsleep")),
             RelayToneRules(tone?.getBoolean("enabled") ?: false, tonePreset("urgent"), tonePreset("negative"), tonePreset("neutral")),
             if (version == 1) legacy!!.second else json.getBoolean("everyoneElseSilent"),
+            RelayCallRule(calls?.optBoolean("enabled") ?: false,
+                calls?.optString("preset", RelayPreset.DOUBLE.id)?.let(RelayPreset::parse) ?: RelayPreset.DOUBLE),
         )
     }
 
@@ -74,6 +77,7 @@ internal object RelayRuleStore {
             .put("silence", JSONObject().put("pauseUntil", s.pauseUntil).put("quietEnabled", s.quietEnabled)
                 .put("startMinute", s.startMinute).put("endMinute", s.endMinute)
                 .put("onlyWhileAsleep", s.onlyWhileAsleep))
+        json.put("calls", JSONObject().put("enabled", config.calls.enabled).put("preset", config.calls.preset.id))
         val t = config.tone
         json.put("tone", JSONObject().put("enabled", t.enabled).put("urgent", t.urgent?.id ?: JSONObject.NULL)
             .put("negative", t.negative?.id ?: JSONObject.NULL).put("neutral", t.neutral?.id ?: JSONObject.NULL))
@@ -106,6 +110,8 @@ internal object RelayRuleStore {
             "startMinute" to c.silence.startMinute, "endMinute" to c.silence.endMinute,
             "onlyWhileAsleep" to c.silence.onlyWhileAsleep,
             "silenceReason" to c.silence.reason(System.currentTimeMillis()),
+            "callAlertsSupported" to (android.os.Build.VERSION.SDK_INT >= 34),
+            "callAlertsEnabled" to c.calls.enabled, "callPreset" to c.calls.preset.id,
             "toneEnabled" to c.tone.enabled, "toneUrgent" to c.tone.urgent?.id,
             "toneNegative" to c.tone.negative?.id, "toneNeutral" to c.tone.neutral?.id)
     }

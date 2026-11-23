@@ -5,6 +5,14 @@ import org.junit.Test
 import org.json.JSONObject
 
 class RelayRuleStoreTest {
+    @Test fun callRuleRoundTripsAndDefaultsOffForOlderSettings() {
+        val expected = RelayRuleConfig(calls = RelayCallRule(true, RelayPreset.LOW))
+        val encoded = RelayRuleStore.encode(expected)
+        assertEquals(expected, RelayRuleStore.decode(encoded))
+        encoded.remove("calls")
+        assertEquals(RelayCallRule(), RelayRuleStore.decode(encoded).calls)
+    }
+
     @Test fun `settings round trip preserves inheritance mute pause and quiet window`() {
         val expected = RelayRuleConfig(RelayPreset.DOUBLE,
             mapOf("com.whatsapp" to RelayAppRule(true, RelayPreset.LOW), "com.calendar" to RelayAppRule(false)),

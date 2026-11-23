@@ -769,6 +769,12 @@ class DemoController extends ChangeNotifier {
   Future<void> setOnlyWhileAsleep(bool enabled) =>
       _relayCall('setOnlyWhileAsleep', {'enabled': enabled});
 
+  Future<void> setCallAlertsEnabled(bool enabled) =>
+      _relayCall('setCallAlertsEnabled', {'enabled': enabled});
+
+  Future<void> saveCallPreset(VibrationPreset preset) =>
+      _relayCall('saveCallPreset', {'preset': preset.id});
+
   Future<void> saveToneRules({
     required bool enabled,
     VibrationPreset? urgent,
