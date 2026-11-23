@@ -72,6 +72,7 @@ Future<void> _editVibration(
   context,
   state,
   title: chat.label,
+  subtitle: chat.appName,
   initial: chat.preset,
   allowMute: true,
   inheritLabel: 'App vibration',
@@ -138,7 +139,46 @@ class _PeoplePage extends StatelessWidget {
         body: ListView(
           padding: const EdgeInsets.all(20),
           children: [
+            FilledButton.icon(
+              key: const ValueKey('add-chat'),
+              onPressed: busy
+                  ? null
+                  : () => showModalBottomSheet<void>(
+                      context: context,
+                      isScrollControlled: true,
+                      useSafeArea: true,
+                      showDragHandle: true,
+                      builder: (_) => FractionallySizedBox(
+                        heightFactor: .85,
+                        child: _AddChatSheet(controller: state),
+                      ),
+                    ),
+              icon: const Icon(Icons.person_add_outlined),
+              label: const Text('Add chat'),
+            ),
+            const SizedBox(height: 24),
+            Text('Saved chats', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            if (settings.chats.isEmpty) const Text('No saved chats yet.'),
+            for (final chat in settings.chats)
+              ListTile(
+                key: ValueKey('chat-${chat.id}'),
+                contentPadding: EdgeInsets.zero,
+                leading: const CircleAvatar(child: Icon(Icons.person_outline)),
+                title: Text(chat.label),
+                subtitle: Text(
+                  _details(chat, chat.preset?.label ?? 'App vibration'),
+                ),
+                onTap: busy ? null : () => _editVibration(context, state, chat),
+                trailing: IconButton(
+                  key: ValueKey('remove-chat-${chat.id}'),
+                  tooltip: 'Remove chat',
+                  icon: const Icon(Icons.close),
+                  onPressed: busy ? null : () => _remove(context, chat),
+                ),
+              ),
             if (disabledChatApps.isNotEmpty) ...[
+              const SizedBox(height: 8),
               const Text('Enable the source app to use its saved chat rules.'),
               for (final app in disabledChatApps)
                 Align(
@@ -157,100 +197,56 @@ class _PeoplePage extends StatelessWidget {
                     child: Text('Turn on ${app['label']}'),
                   ),
                 ),
-              const SizedBox(height: 12),
             ],
-            if (settings.chats.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: Text(
-                  'Add a person or group to give them their own vibration or to mute them.',
+            const Divider(height: 32),
+            ExpansionTile(
+              key: const ValueKey('unsaved-chat-settings'),
+              tilePadding: EdgeInsets.zero,
+              title: const Text('Unsaved chats'),
+              subtitle: const Text('Choose which apps relay only saved chats'),
+              children: [
+                SwitchListTile(
+                  key: const ValueKey('everyone-else'),
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('WhatsApp & WhatsApp Business'),
+                  subtitle: Text(
+                    settings.everyoneElseSilent
+                        ? 'Only saved chats'
+                        : 'All chats use the app rule',
+                  ),
+                  value: settings.everyoneElseSilent,
+                  onChanged: busy
+                      ? null
+                      : (silent) => _attempt(
+                          context,
+                          state,
+                          () => state.setEveryoneElseSilent(silent),
+                        ),
                 ),
-              ),
-            for (final chat in settings.chats)
-              ListTile(
-                key: ValueKey('chat-${chat.id}'),
-                contentPadding: EdgeInsets.zero,
-                leading: const CircleAvatar(child: Icon(Icons.person_outline)),
-                title: Text(chat.label),
-                subtitle: Text(
-                  _details(chat, chat.preset?.label ?? 'App vibration'),
-                ),
-                onTap: busy ? null : () => _editVibration(context, state, chat),
-                trailing: IconButton(
-                  key: ValueKey('remove-chat-${chat.id}'),
-                  tooltip: 'Remove',
-                  icon: const Icon(Icons.close),
-                  onPressed: busy ? null : () => _remove(context, chat),
-                ),
-              ),
-            const Divider(height: 24),
-            SwitchListTile(
-              key: const ValueKey('everyone-else'),
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Other WhatsApp chats'),
-              subtitle: Text(
-                !settings.everyoneElseSilent
-                    ? 'Vibrates with the app vibration'
-                    : settings.chats.isEmpty
-                    ? 'Silent · No WhatsApp chat can vibrate until you add one'
-                    : 'Silent · Only the people above vibrate',
-              ),
-              value: !settings.everyoneElseSilent,
-              onChanged: busy
-                  ? null
-                  : (vibrates) => _attempt(
-                      context,
-                      state,
-                      () => state.setEveryoneElseSilent(!vibrates),
+                for (final app in otherChatApps)
+                  SwitchListTile(
+                    key: ValueKey('unsaved-chats-${app['packageName']}'),
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(chatAppNames[app['packageName']]!),
+                    subtitle: Text(
+                      settings.silentChatApps.contains(app['packageName'])
+                          ? 'Only saved chats'
+                          : 'All chats use the app rule',
                     ),
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              key: const ValueKey('add-chat'),
-              onPressed: busy
-                  ? null
-                  : () => showModalBottomSheet<void>(
-                      context: context,
-                      isScrollControlled: true,
-                      useSafeArea: true,
-                      builder: (_) => FractionallySizedBox(
-                        heightFactor: .85,
-                        child: _AddChatSheet(controller: state),
-                      ),
-                    ),
-              icon: const Icon(Icons.person_add_outlined),
-              label: const Text('Add person or group'),
-            ),
-            if (otherChatApps.isNotEmpty)
-              ExpansionTile(
-                tilePadding: EdgeInsets.zero,
-                title: const Text('Other chats by app'),
-                subtitle: const Text(
-                  'Choose which apps relay only saved chats',
-                ),
-                children: [
-                  for (final app in otherChatApps)
-                    SwitchListTile(
-                      key: ValueKey('unsaved-chats-${app['packageName']}'),
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(chatAppNames[app['packageName']]!),
-                      subtitle: const Text('Only relay saved chats'),
-                      value: settings.silentChatApps.contains(
-                        app['packageName'],
-                      ),
-                      onChanged: busy
-                          ? null
-                          : (silent) => _attempt(
-                              context,
-                              state,
-                              () => state.setOtherChatsSilent(
-                                app['packageName']! as String,
-                                silent,
-                              ),
+                    value: settings.silentChatApps.contains(app['packageName']),
+                    onChanged: busy
+                        ? null
+                        : (silent) => _attempt(
+                            context,
+                            state,
+                            () => state.setOtherChatsSilent(
+                              app['packageName']! as String,
+                              silent,
                             ),
-                    ),
-                ],
-              ),
+                          ),
+                  ),
+              ],
+            ),
             const SizedBox(height: 24),
             Text(
               'A group rule applies to everyone in that group. Chat names stay on this phone.'
@@ -283,9 +279,9 @@ class _AddChatSheetState extends State<_AddChatSheet> {
     if (_canListen) _listen();
   }
 
-  void _listen() => WidgetsBinding.instance.addPostFrameCallback(
-    (_) => _attempt(context, state, () => state.findChats(true)),
-  );
+  void _listen() => WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (mounted) _attempt(context, state, () => state.findChats(true));
+  });
 
   @override
   void dispose() {
@@ -320,7 +316,7 @@ class _AddChatSheetState extends State<_AddChatSheet> {
               children: [
                 Expanded(
                   child: Text(
-                    'Add person or group',
+                    'Find chats',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
@@ -375,16 +371,31 @@ class _AddChatSheetState extends State<_AddChatSheet> {
                         ),
                     ],
                   ),
-                const SizedBox(height: 4),
-                Text(
-                  'Someone missing? Ask them to send a message, or leave one of their messages unread.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
+                if (_canListen && state.conversationCandidates.isEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('No chats found yet'),
+                          SizedBox(height: 4),
+                          Text(
+                            'Ask someone to send a message or leave one unread '
+                            'in a supported messaging app.',
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
                 if (state.conversationCandidates.length > 8)
                   TextField(
                     key: const ValueKey('chat-search'),
                     decoration: const InputDecoration(
-                      labelText: 'Search',
+                      labelText: 'Search chats or apps',
                       prefixIcon: Icon(Icons.search),
                     ),
                     onChanged: (value) => setState(() => query = value),
@@ -393,7 +404,7 @@ class _AddChatSheetState extends State<_AddChatSheet> {
                 if (found.isEmpty && query.isNotEmpty)
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 16),
-                    child: Text('Nobody with that name found.'),
+                    child: Text('No chats match your search.'),
                   ),
                 for (final chat in found)
                   if (saved[chat.id] case final added?)
@@ -435,13 +446,21 @@ class _AddChatSheetState extends State<_AddChatSheet> {
                         child: const Text('Add'),
                       ),
                     ),
+                if (_canListen && state.conversationCandidates.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Text(
+                      'Missing a chat? Receive a new message while listening.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
                 if (state.conversationCandidates.isEmpty &&
                     stats.isNotEmpty &&
                     !listening)
                   ExpansionTile(
                     key: const ValueKey('capture-details'),
                     tilePadding: EdgeInsets.zero,
-                    title: const Text('Nobody found?'),
+                    title: const Text('Help finding chats'),
                     children: [
                       Text(_diagnosticMessage(stats)),
                       TextButton.icon(

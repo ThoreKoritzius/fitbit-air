@@ -160,14 +160,13 @@ The Android app supports WhatsApp and WhatsApp Business, Google Chat, Telegram,
 and Google Messages when the app provides usable notification metadata. Other
 apps keep their app rule. Changes apply while the relay is running.
 
-1. Open **Rules → People & chats** and choose **Add person or group**.
+1. Open **Rules → People & chats** and choose **Add chat**.
    The picker uses current notifications and listens for new messages for one
    minute. Each result shows its source app.
 2. Tap **Add** to inherit the app vibration. Tap a saved chat to change its
    vibration or mute it. The source app must be enabled under **Your apps**.
-3. **Other WhatsApp chats** retains the existing WhatsApp and WhatsApp Business
-   setting. Use **Other chats by app** to relay only saved chats in another
-   supported messaging app.
+3. Open **Unsaved chats** to choose which apps relay only saved chats.
+   WhatsApp and WhatsApp Business share their existing setting.
 4. Send a new message from a saved and an unsaved conversation to check the
    selected behavior. If a conversation is missing, leave it unread or ask for
    a fresh message, then tap **Listen again**.
@@ -178,7 +177,7 @@ notification's conversation title (or title), never senders from message
 history, and needs message metadata; generic app titles, blank titles and titles
 over 512 characters are rejected.
 
-**Nobody found?** appears when listening finished without results. It explains
+**Help finding chats** appears when listening finished without results. It explains
 whether no supported chat notification arrived, notifications lacked chat details, or
 only summaries arrived, and **Copy sanitized debug report** copies the safe
 counts (notifications seen, unread snapshot, summaries, ongoing, missing IDs,
@@ -192,7 +191,7 @@ in app-private preferences, which are excluded from cloud backup and device
 transfer. Raw shortcut IDs and exact titles are hashed with app/type namespaces;
 the original stable-ID hash format is preserved. Rules saved by earlier versions,
 where saved chats and the **All chats/Selected** mode were stored separately, are
-merged once on upgrade: **Selected** becomes **Other WhatsApp chats: silent**.
+merged once on upgrade: **Selected** becomes **Only saved chats** for WhatsApp.
 
 Reports include only whether everyone else is silent, the saved-chat count, the
 number of chats with their own vibration and the capture counts, never names,

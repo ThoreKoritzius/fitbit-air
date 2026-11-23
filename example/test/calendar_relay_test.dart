@@ -308,7 +308,7 @@ void main() {
     if (key == 'app-picker' ||
         key == 'conversation-picker' ||
         (key == 'add-chat' &&
-            find.byKey(const ValueKey('everyone-else')).evaluate().isEmpty)) {
+            find.byKey(const ValueKey('add-chat')).evaluate().isEmpty)) {
       await tester.tap(find.byKey(const ValueKey('nav-rules')));
       await tester.pumpAndSettle();
       if (key == 'app-picker') return;
@@ -964,10 +964,11 @@ void main() {
     running = true;
     await mount(tester);
     await tap(tester, 'conversation-picker');
-    expect(find.text('Vibrates with the app vibration'), findsOneWidget);
+    await tap(tester, 'unsaved-chat-settings');
+    expect(find.text('All chats use the app rule'), findsOneWidget);
     await tap(tester, 'everyone-else');
     expect(controller.settings.everyoneElseSilent, isTrue);
-    expect(find.textContaining('No WhatsApp chat can vibrate'), findsOneWidget);
+    expect(find.text('Only saved chats'), findsOneWidget);
     expect(
       controller.report()['relay'],
       containsPair('everyoneElseSilent', true),
@@ -990,10 +991,7 @@ void main() {
     await tap(tester, 'add-telegram-alice');
     expect(controller.settings.chats.single.packageName, 'org.telegram.messenger');
     await tap(tester, 'close-add-chat');
-    final appRules = find.text('Other chats by app');
-    await tester.ensureVisible(appRules);
-    await tester.tap(appRules);
-    await tester.pumpAndSettle();
+    await tap(tester, 'unsaved-chat-settings');
     await tap(tester, 'unsaved-chats-org.telegram.messenger');
     expect(controller.settings.silentChatApps, {'org.telegram.messenger'});
     expect(controller.settings.everyoneElseSilent, isFalse);
