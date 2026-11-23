@@ -99,11 +99,12 @@ class _VibrationEditorState extends State<_VibrationEditor> {
         );
       }
     } finally {
-      if (mounted)
+      if (mounted) {
         setState(() {
           working = false;
           saving = false;
         });
+      }
     }
   }
 
