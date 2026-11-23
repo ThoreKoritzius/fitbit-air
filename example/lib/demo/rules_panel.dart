@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'demo_controller.dart';
 import 'app_icon.dart';
 import 'conversation_picker.dart';
@@ -108,30 +109,7 @@ class _RulesPanelState extends State<RulesPanel> {
             title: const Text('BuzzKill via Tasker'),
             subtitle: const Text('Set up a vibration for a BuzzKill rule'),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => showDialog<void>(
-              context: context,
-              builder: (context) => AlertDialog(
-                title: const Text('BuzzKill via Tasker'),
-                content: const SingleChildScrollView(
-                  child: SelectableText(
-                    '1. In Tasker, create a task with a Notify action. Use '
-                    '“Air Relay trigger” as the title and %TIMEMS as the text. '
-                    'Leave Permanent off.\n\n'
-                    '2. Enable Allow External Access in Tasker. In BuzzKill, '
-                    'choose Trigger Tasker and select your task.\n\n'
-                    '3. Turn on Tasker under Your apps and start the relay. '
-                    'Turn off direct relay rules for apps handled by BuzzKill '
-                    'to avoid duplicate vibrations.',
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Done'),
-                  ),
-                ],
-              ),
-            ),
+            onTap: () => _showTaskerSetup(context),
           ),
         const SizedBox(height: 24),
         Wrap(
@@ -222,6 +200,71 @@ class _RulesPanelState extends State<RulesPanel> {
       ],
     );
   }
+}
+
+Future<void> _showTaskerSetup(BuildContext context) => showDialog<void>(
+  context: context,
+  builder: (context) => AlertDialog(
+    title: const Text('BuzzKill via Tasker'),
+    scrollable: true,
+    content: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text(
+          '1. Create a Notify action in Tasker. Leave Permanent off '
+          'and allow Tasker to post notifications.',
+        ),
+        const _TaskerValue(label: 'Title', value: 'Air Relay trigger'),
+        const _TaskerValue(label: 'Text', value: '%TIMEMS'),
+        const SizedBox(height: 12),
+        const Text(
+          '2. Enable Tasker under Your apps and start the relay. '
+          'Tap Play in Tasker, then check Recent activity for Sent. '
+          'If you see Quiet · Phone awake, turn off the sleep rule for the test.',
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          '3. Enable Allow External Access in Tasker. Choose '
+          'Trigger Tasker in your BuzzKill rule and select the task. '
+          'Turn off direct Air Relay rules for those apps to avoid two buzzes.',
+        ),
+      ],
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Done'),
+      ),
+    ],
+  ),
+);
+
+class _TaskerValue extends StatelessWidget {
+  const _TaskerValue({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: Theme.of(context).textTheme.labelSmall),
+            SelectableText(value),
+          ],
+        ),
+      ),
+      IconButton(
+        tooltip: 'Copy ${label.toLowerCase()}',
+        onPressed: () => Clipboard.setData(ClipboardData(text: value)),
+        icon: const Icon(Icons.content_copy),
+      ),
+    ],
+  );
 }
 
 List<Widget> _toneRules(

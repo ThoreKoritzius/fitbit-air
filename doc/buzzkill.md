@@ -8,15 +8,14 @@ that Air Relay turns into a vibration through its existing relay queue.
    Leave **Permanent** off. Use a dedicated silent notification category if you
    want the phone to stay quiet. Keep the category enabled so Android posts the
    notification. Allow Tasker to post notifications if prompted.
-2. In Tasker preferences, enable **Allow External Access**. In BuzzKill, create
-   a rule with the conditions you want and choose **Trigger Tasker**. Select
-   **Vibrate Fitbit Air**.
-3. In Air Relay, turn on **Tasker** under **Rules → Your apps**, choose its
-   vibration, and start the relay. Turn off direct Air Relay rules for apps
-   handled by BuzzKill so the original alert cannot also cause a vibration.
-4. Run the task in Tasker once to check the connection, then trigger a matching
-   notification to check the BuzzKill rule. With the relay running, both should
-   vibrate your Air. Pause the relay and repeat to check that it stays quiet.
+2. In Air Relay, turn on **Tasker** under **Rules → Your apps**, choose its
+   vibration, and start the relay. Run the task in Tasker and look for **Sent**
+   under **Recent activity**. If it says **Quiet · Phone awake**, turn off the
+   sleep rule while you test.
+3. Enable **Allow External Access** in Tasker. In BuzzKill, create a rule with
+   the conditions you want and choose **Trigger Tasker**. Select **Vibrate
+   Fitbit Air**. Turn off direct Air Relay rules for apps handled by BuzzKill
+   to avoid two vibrations for the same alert.
 
 Use the same title for every run. Tasker replaces the existing notification,
 and the timestamp lets Air Relay recognize a new run without vibrating twice
