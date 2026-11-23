@@ -101,26 +101,8 @@ class _RulesPanelState extends State<RulesPanel> {
         const SizedBox(height: 12),
         ..._toneRules(context, state, widget.perform),
         const SizedBox(height: 24),
-        Wrap(
-          spacing: 12,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Text('Your apps', style: Theme.of(context).textTheme.titleLarge),
-            TextButton.icon(
-              key: const ValueKey('sort-selected-apps'),
-              onPressed: () =>
-                  setState(() => _selectedAtSort = Set.of(state.selectedApps)),
-              icon: const Icon(Icons.vertical_align_top, size: 18),
-              label: const Text('Selected first'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        AppSelectionButtons(
-          controller: state,
-          blocked: state.changingRelay,
-          perform: widget.perform,
-        ),
+        Text('Your apps', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 8),
         TextFormField(
           key: const ValueKey('app-search'),
           initialValue: state.appSearch,
@@ -130,7 +112,13 @@ class _RulesPanelState extends State<RulesPanel> {
           ),
           onChanged: state.searchApps,
         ),
-        const SizedBox(height: 12),
+        AppSelectionButtons(
+          controller: state,
+          blocked: state.changingRelay,
+          perform: widget.perform,
+          onSelectedFirst: () =>
+              setState(() => _selectedAtSort = Set.of(state.selectedApps)),
+        ),
         if (state.filteredApps.isEmpty)
           const Padding(
             padding: EdgeInsets.all(12),

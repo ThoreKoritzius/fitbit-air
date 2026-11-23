@@ -395,11 +395,6 @@ class _RelaySetupPageState extends State<RelaySetupPage> {
                           ),
                       ],
                       if (step == 2) ...[
-                        AppSelectionButtons(
-                          controller: state,
-                          blocked: blocked,
-                          perform: (action) => run(action),
-                        ),
                         TextField(
                           key: const ValueKey('setup-app-search'),
                           decoration: const InputDecoration(
@@ -408,7 +403,11 @@ class _RelaySetupPageState extends State<RelaySetupPage> {
                           ),
                           onChanged: (value) => setState(() => query = value),
                         ),
-                        const SizedBox(height: 12),
+                        AppSelectionButtons(
+                          controller: state,
+                          blocked: blocked,
+                          perform: (action) => run(action),
+                        ),
                         for (final app in apps)
                           SwitchListTile(
                             key: ValueKey('setup-app-${app['packageName']}'),
