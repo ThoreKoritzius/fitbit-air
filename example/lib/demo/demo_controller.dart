@@ -754,6 +754,9 @@ class DemoController extends ChangeNotifier {
     {'enabled': enabled, 'startMinute': start, 'endMinute': end},
   );
 
+  Future<void> setOnlyWhileAsleep(bool enabled) =>
+      _relayCall('setOnlyWhileAsleep', {'enabled': enabled});
+
   Future<void> saveToneRules({
     required bool enabled,
     VibrationPreset? urgent,

@@ -41,6 +41,7 @@ internal data class RelaySilence(
     val quietEnabled: Boolean = false,
     val startMinute: Int = 1320,
     val endMinute: Int = 420,
+    val onlyWhileAsleep: Boolean = false,
 ) {
     init {
         require(pauseUntil >= -1 && startMinute in 0..1439 && endMinute in 0..1439)

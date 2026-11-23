@@ -234,6 +234,9 @@ class CalendarRelayService : Service() {
 
     fun acceptsPackage(packageName: String): Boolean = ready && !stopping && packageName in selectedPackages
 
+    private fun phoneAwake(silence: RelaySilence): Boolean =
+        silence.onlyWhileAsleep && getSystemService(PowerManager::class.java).isInteractive
+
     internal fun onAlert(packageName: String, key: String, postedAt: Long, ongoing: Boolean, summary: Boolean, messageTimestamp: Long?, conversationIds: Set<String>, tone: RelayTone? = null) {
         if (!ready || stopping) return
         val now = System.currentTimeMillis()
@@ -244,6 +247,10 @@ class CalendarRelayService : Service() {
         if (match == null) { record(nextId(), packageName, postedAt, "filtered", tone = category); return }
         val silence = config.silence.reason(now)
         if (silence != null) { cancelWaiting(silence); record(nextId(), packageName, postedAt, silence, tone = category); return }
+        if (phoneAwake(config.silence)) {
+            record(nextId(), packageName, postedAt, "phone_awake", match = match)
+            return
+        }
         submit(packageName, postedAt, match)
     }
 
@@ -295,17 +302,26 @@ class CalendarRelayService : Service() {
     private fun sendFollowUp() {
         if (stopping || !coalescer.hasFollowUp) return
         val now = System.currentTimeMillis()
-        val silence = RelayRuleStore.read(this).silence.reason(now)
+        val settings = RelayRuleStore.read(this).silence
+        val silence = settings.reason(now)
         if (silence != null) { cancelWaiting(silence); return }
+        val awake = phoneAwake(settings)
         val members = coalescer.takeFollowUp().mapNotNull { id ->
             val source = inFlight.remove(id)
             val choice = choices.remove(id)
             if (source == null || choice == null) null else Triple(id, source, choice)
         }
-        val fresh = members.filter { now >= it.second.second && now - it.second.second < 30_000 }
-        members.filterNot { it in fresh }.forEach {
-            record(it.first, it.second.first, it.second.second, "expired")
-            previewReplies.remove(it.first)?.invoke(RelayWorkerResult("failed", "EXPIRED"))
+        val fresh = members.filter { (id, source, choice) ->
+            val stage = when {
+                now < source.second || now - source.second >= 30_000 -> "expired"
+                awake && source.first != null -> "phone_awake"
+                else -> null
+            }
+            if (stage == null) true else {
+                record(id, source.first, source.second, stage, match = choice.match)
+                previewReplies.remove(id)?.invoke(RelayWorkerResult("failed", "EXPIRED"))
+                false
+            }
         }
         val winner = fresh.reduceOrNull { a, b -> if (a.third.prefer(b.third) === b.third) b else a }
         fresh.forEach { record(it.first, it.second.first, it.second.second, "combined", match = it.third.match) }
@@ -353,7 +369,9 @@ class CalendarRelayService : Service() {
             coalescer.onFinished(now)?.let { if (!stopping) handler.postDelayed(followUp, maxOf(0, it - now)) }
             end()
         }
-        val silence = RelayRuleStore.read(this).silence.reason(System.currentTimeMillis())
+        val settings = RelayRuleStore.read(this).silence
+        val silence = settings.reason(System.currentTimeMillis())
+            ?: "phone_awake".takeIf { sbnPackage != null && phoneAwake(settings) }
         if (silence != null || System.currentTimeMillis() >= expiresAt) {
             finished(RelayWorkerResult(silence ?: "expired", null)); return
         }

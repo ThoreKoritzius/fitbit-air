@@ -22,6 +22,13 @@ class RelayRuleStoreTest {
         val legacy = RelayRuleStore.encode(RelayRuleConfig(RelayPreset.LOW)).apply { remove("tone") }
         assertEquals(RelayToneRules(), RelayRuleStore.decode(legacy).tone)
     }
+    @Test fun `sleep rule round trips and defaults off for existing settings`() {
+        val expected = RelayRuleConfig(silence = RelaySilence(onlyWhileAsleep = true))
+        val encoded = RelayRuleStore.encode(expected)
+        assertEquals(expected, RelayRuleStore.decode(encoded))
+        encoded.getJSONObject("silence").remove("onlyWhileAsleep")
+        assertFalse(RelayRuleStore.decode(encoded).silence.onlyWhileAsleep)
+    }
     @Test(expected = IllegalArgumentException::class) fun `newer schema is not treated as an empty default`() {
         val json = RelayRuleStore.encode(RelayRuleConfig()).put("version", 3)
         RelayRuleStore.decode(json)
