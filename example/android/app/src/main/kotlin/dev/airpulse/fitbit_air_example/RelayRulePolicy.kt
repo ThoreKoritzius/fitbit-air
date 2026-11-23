@@ -13,7 +13,7 @@ internal enum class RelayPreset(val id: String, val intensity: Int? = null) {
 
 internal data class RelayAppRule(val enabled: Boolean, val preset: RelayPreset? = null)
 /**
- * A WhatsApp chat the user saved. [kind] is "shortcut" (stable conversation ID) or
+ * A chat the user saved. [kind] is "shortcut" (stable conversation ID) or
  * "name" (exact chat name); [preset] null uses the app vibration. Labels stay on this phone.
  */
 internal data class SavedChat(
@@ -65,14 +65,17 @@ internal data class RelayRuleConfig(
     val silence: RelaySilence = RelaySilence(),
     val tone: RelayToneRules = RelayToneRules(),
     val everyoneElseSilent: Boolean = false,
+    val silentChatApps: Set<String> = emptySet(),
 ) {
     val selectedPackages: Set<String> get() = apps.filterValues { it.enabled }.keys
     fun match(packageName: String, identities: Set<String>, tone: RelayTone? = null): RelayMatch? {
         val app = apps[packageName]?.takeIf { it.enabled } ?: return null
-        val whatsapp = packageName in RelayConversationPolicy.packages
-        val saved = if (whatsapp) identities.mapNotNull { chats[it] } else emptyList()
-        // "Everyone else: Silent" lets only saved chats through.
-        if (whatsapp && everyoneElseSilent && saved.isEmpty()) return null
+        val saved = if (packageName in RelayConversationPolicy.packages)
+            identities.mapNotNull { chats[it]?.takeIf { chat -> chat.packageName == packageName } }
+        else emptyList()
+        val restricted = packageName in silentChatApps ||
+            (everyoneElseSilent && packageName in RelayConversationPolicy.whatsappPackages)
+        if (restricted && saved.isEmpty()) return null
         val overrides = saved.mapNotNull { it.preset }
         // A saved mute always wins if Android supplies multiple identity forms.
         if (RelayPreset.MUTE in overrides) return null

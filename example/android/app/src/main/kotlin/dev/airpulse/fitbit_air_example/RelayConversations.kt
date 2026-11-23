@@ -9,7 +9,7 @@ import android.os.Looper
 import org.json.JSONArray
 
 /**
- * Finds chats from WhatsApp notifications so the user can save them; saved chats
+ * Finds chats from supported messaging notifications so the user can save them; saved chats
  * live in [RelayRuleStore]. Metadata only: no message text is read, stored or exported.
  */
 internal object RelayConversations {
@@ -50,7 +50,9 @@ internal object RelayConversations {
     private fun options(packageName: String, notification: Notification): List<ConversationIdentity> =
         RelayConversationIdentity.options(packageName,
             if (Build.VERSION.SDK_INT >= 26) notification.shortcutId else null,
-            title(notification), notification.extras.containsKey(Notification.EXTRA_MESSAGES))
+            title(notification),
+            notification.extras.containsKey(Notification.EXTRA_MESSAGES) ||
+                (packageName in RelayConversationPolicy.otherApps && notification.category == Notification.CATEGORY_MESSAGE))
 
     fun identities(packageName: String, notification: Notification): Set<String> =
         if (packageName !in RelayConversationPolicy.packages) emptySet() else runCatching { options(packageName, notification).map { it.id }.toSet() }.getOrDefault(emptySet())

@@ -21,7 +21,7 @@ and the `fitbit_air` Flutter package it is built on.
 |---|---|---|
 | Notifications from all apps (Android notification access) | To match notifications against your rules and decide whether to vibrate your Air | Nothing from the content. A short local history keeps the app's package name, time, result, chosen vibration and, if you turn on **Message tone**, the category (urgent, negative or neutral). |
 | Message text (only with **Message tone** on) | Classified on the phone, in memory, to choose a vibration | Only the category above; the text is discarded immediately |
-| WhatsApp chat names (only if you choose people) | To vibrate only for the chats you pick | The chat names and identifiers you select |
+| Chat names from supported messaging apps (only if you choose chats) | To match vibration rules for the chats you pick | The chat names you select and hashed match identifiers |
 | Nearby devices (Bluetooth) | To connect to your paired Fitbit Air and send vibrations, read its battery, firmware version and signal strength | The last battery reading and firmware version |
 | Notifications (posting) | To show the running relay with pause and stop controls | Nothing |
 

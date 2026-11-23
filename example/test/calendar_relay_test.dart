@@ -34,6 +34,7 @@ void main() {
   late List<String> calls;
   late List<String> selected;
   late DemoController controller;
+  late bool telegramInstalled;
   late Map<String, Object?> conversations;
   late Map<String, Object?> rules;
 
@@ -60,6 +61,7 @@ void main() {
     paired = true;
     deferStop = false;
     nameCandidate = false;
+    telegramInstalled = false;
     pulseStyle = 'single';
     rules = {
       'defaultPreset': 'single',
@@ -118,6 +120,16 @@ void main() {
             case 'setEveryoneElseSilent':
               rules['everyoneElseSilent'] = (call.arguments as Map)['silent'];
               return null;
+            case 'setOtherChatsSilent':
+              final args = call.arguments as Map;
+              final apps = (rules['silentChatApps'] as List? ?? []).toSet();
+              if (args['silent'] == true) {
+                apps.add(args['packageName']);
+              } else {
+                apps.remove(args['packageName']);
+              }
+              rules['silentChatApps'] = apps.toList();
+              return null;
             case 'captureConversations':
               conversations['captureRemainingMillis'] =
                   (call.arguments as Map)['enabled'] == true ? 60000 : 0;
@@ -128,6 +140,13 @@ void main() {
                   'packageName': 'com.whatsapp',
                   'kind': nameCandidate ? 'name' : 'shortcut',
                 },
+                if (telegramInstalled)
+                  {
+                    'id': 'telegram-alice',
+                    'label': 'Private Alice',
+                    'packageName': 'org.telegram.messenger',
+                    'kind': 'shortcut',
+                  },
               ];
               return null;
             case 'saveChat':
@@ -161,6 +180,8 @@ void main() {
                     'label': 'Google Calendar',
                   },
                 {'packageName': 'com.whatsapp', 'label': 'WhatsApp'},
+                if (telegramInstalled)
+                  {'packageName': 'org.telegram.messenger', 'label': 'Telegram'},
                 {
                   'packageName': 'org.thoughtcrime.securesms',
                   'label': 'Signal',
@@ -287,7 +308,7 @@ void main() {
     if (key == 'app-picker' ||
         key == 'conversation-picker' ||
         (key == 'add-chat' &&
-            find.byKey(const ValueKey('everyone-else')).evaluate().isEmpty)) {
+            find.byKey(const ValueKey('add-chat')).evaluate().isEmpty)) {
       await tester.tap(find.byKey(const ValueKey('nav-rules')));
       await tester.pumpAndSettle();
       if (key == 'app-picker') return;
@@ -943,16 +964,37 @@ void main() {
     running = true;
     await mount(tester);
     await tap(tester, 'conversation-picker');
-    expect(find.text('Vibrates with the app vibration'), findsOneWidget);
+    await tap(tester, 'unsaved-chat-settings');
+    expect(find.text('All chats use the app rule'), findsOneWidget);
     await tap(tester, 'everyone-else');
     expect(controller.settings.everyoneElseSilent, isTrue);
-    expect(find.textContaining('No WhatsApp chat can vibrate'), findsOneWidget);
+    expect(find.text('Only saved chats'), findsOneWidget);
     expect(
       controller.report()['relay'],
       containsPair('everyoneElseSilent', true),
     );
     expect(running, isTrue);
     expect(calls, isNot(contains('stop')));
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('same-name chats show their app and saved-only rules are scoped', (
+    tester,
+  ) async {
+    access = true;
+    telegramInstalled = true;
+    selected.add('org.telegram.messenger');
+    await mount(tester);
+    await tap(tester, 'add-chat');
+    expect(find.text('Private Alice'), findsNWidgets(2));
+    expect(find.text('Telegram'), findsOneWidget);
+    await tap(tester, 'add-telegram-alice');
+    expect(controller.settings.chats.single.packageName, 'org.telegram.messenger');
+    await tap(tester, 'close-add-chat');
+    await tap(tester, 'unsaved-chat-settings');
+    await tap(tester, 'unsaved-chats-org.telegram.messenger');
+    expect(controller.settings.silentChatApps, {'org.telegram.messenger'});
+    expect(controller.settings.everyoneElseSilent, isFalse);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -963,7 +1005,7 @@ void main() {
     nameCandidate = true;
     await mount(tester);
     await tap(tester, 'add-chat');
-    expect(find.text('Matched by name'), findsOneWidget);
+    expect(find.textContaining('Matched by name'), findsOneWidget);
     await tap(tester, 'add-abcdef012345');
     expect(lastSelection, {'id': 'abcdef012345', 'preset': null});
     expect(controller.settings.chats.single.nameMatch, isTrue);
@@ -1076,7 +1118,7 @@ void main() {
     await tester.pumpAndSettle();
     await tap(tester, 'capture-details');
     expect(
-      find.textContaining('No WhatsApp notifications arrived'),
+      find.textContaining('No chat notifications arrived'),
       findsOneWidget,
     );
     expect(controller.captureDiagnostics, {'seen': 0});

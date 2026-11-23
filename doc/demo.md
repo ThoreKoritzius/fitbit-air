@@ -7,7 +7,7 @@ notification filtering and Android lifecycle management are not package APIs.
 
 - **Home:** relay status, Start/Stop, timed pause, default vibration preview,
   setup checks and recent outcomes.
-- **Rules:** selected apps, per-app/chat vibration presets, WhatsApp people and
+- **Rules:** selected apps, per-app/chat vibration presets, People & chats and
   restrictions, and daily quiet hours. App edits apply to new alerts while on.
 - **Device:** pairing, device controls/information, heart rate and historical
   wrist observation. **Developer tools** opens Lab.
@@ -154,28 +154,22 @@ revision needs its own physical acceptance test. Tag/publish 0.1.2 only after th
 checklist passes. Automatic reboot recovery and durable replay protection remain
 future work.
 
-## WhatsApp people
+## People & chats
 
-This example-only feature supports WhatsApp and WhatsApp Business. Other apps
-keep their app rule. Changes apply immediately, also while the relay is running.
+The Android app supports WhatsApp and WhatsApp Business, Google Chat, Telegram,
+and Google Messages when the app provides usable notification metadata. Other
+apps keep their app rule. Changes apply while the relay is running.
 
-1. Open **Rules > WhatsApp people**. Saved people and groups are listed with their
-   vibration; tap one to change it (or mute it), or tap **×** to remove it.
-2. **Everyone else** controls chats you have not saved. On, they vibrate with the
-   app vibration. Off (silent), only saved chats vibrate; with nobody saved, no
-   WhatsApp chat vibrates.
-3. Tap **Add person or group**. The sheet lists chats from current WhatsApp
-   notifications and listens for new ones for a minute. Tap **Add** next to a
-   chat; it starts with the app vibration, and tapping it again changes that.
-   If someone is missing, ask them to send a message, or leave one of their
-   messages unread, then tap **Listen again**. Closing the sheet stops listening;
-   found chats stay addable for five minutes.
-4. A chat is matched by its conversation ID when WhatsApp provides one. Otherwise
-   it is **Matched by name**: the exact notification chat name is used, so
-   renaming the chat stops matching and another chat with the same name matches
-   too. The page explains this when such a chat is saved.
-5. Test a fresh message with the phone locked, and one from a chat you have not
-   saved, with **Everyone else** on and off.
+1. Open **Rules → People & chats** and choose **Add chat**.
+   The picker uses current notifications and listens for new messages for one
+   minute. Each result shows its source app.
+2. Tap **Add** to inherit the app vibration. Tap a saved chat to change its
+   vibration or mute it. The source app must be enabled under **Your apps**.
+3. Open **Unsaved chats** to choose which apps relay only saved chats.
+   WhatsApp and WhatsApp Business share their existing setting.
+4. Send a new message from a saved and an unsaved conversation to check the
+   selected behavior. If a conversation is missing, leave it unread or ask for
+   a fresh message, then tap **Listen again**.
 
 A saved direct chat is one person; a saved group covers everyone in it. Sender
 matching inside a group is not implemented. Name matching uses the current
@@ -183,8 +177,8 @@ notification's conversation title (or title), never senders from message
 history, and needs message metadata; generic app titles, blank titles and titles
 over 512 characters are rejected.
 
-**Nobody found?** appears when listening finished without results. It explains
-whether no WhatsApp notification arrived, notifications lacked chat details, or
+**Help finding chats** appears when listening finished without results. It explains
+whether no supported chat notification arrived, notifications lacked chat details, or
 only summaries arrived, and **Copy sanitized debug report** copies the safe
 counts (notifications seen, unread snapshot, summaries, ongoing, missing IDs,
 name-only, unusable, errors). Counts contain no names, IDs, notification keys,
@@ -197,7 +191,7 @@ in app-private preferences, which are excluded from cloud backup and device
 transfer. Raw shortcut IDs and exact titles are hashed with app/type namespaces;
 the original stable-ID hash format is preserved. Rules saved by earlier versions,
 where saved chats and the **All chats/Selected** mode were stored separately, are
-merged once on upgrade: **Selected** becomes **Everyone else: silent**.
+merged once on upgrade: **Selected** becomes **Only saved chats** for WhatsApp.
 
 Reports include only whether everyone else is silent, the saved-chat count, the
 number of chats with their own vibration and the capture counts, never names,
@@ -213,10 +207,10 @@ For agent-driven local setup, `DemoController` offers `findChats(listen)`,
 IDs exist only in local controller state; do not copy them into test logs or PRs.
 
 Physical acceptance remains pending. Test finding unread and new messages,
-listening again, missing-ID chats, saved versus unsaved chats with Everyone else
+listening again, missing-ID chats, saved versus unsaved chats with saved-only rules
 on and off, edits while the relay runs, groups, Business/app separation, private
 notifications, upgrade from a Selected setup, process restart and removal. Local
-tests cannot establish what metadata WhatsApp supplies on the paired phone.
+tests cannot establish what metadata each messaging app supplies on the paired phone.
 
 ### Investigating Health sync after relay use (dev.3)
 

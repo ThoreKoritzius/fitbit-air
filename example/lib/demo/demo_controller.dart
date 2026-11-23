@@ -433,7 +433,7 @@ class DemoController extends ChangeNotifier {
   int unsupportedConversations = 0;
   Map<String, int> captureDiagnostics = {};
 
-  /// Chats found in WhatsApp notifications while finding chats; saved ones are in [settings].
+  /// Chats found in messaging notifications while finding chats; saved ones are in [settings].
   List<SavedChat> conversationCandidates = [];
   int secureDurationSeconds = 30;
   Timer? _poll;
@@ -754,9 +754,14 @@ class DemoController extends ChangeNotifier {
   Future<void> setEveryoneElseSilent(bool silent) =>
       _relayCall('setEveryoneElseSilent', {'silent': silent});
 
-  /// Lists chats from current WhatsApp notifications and listens for new ones for a minute.
+  /// Lists chats from current messaging notifications and listens for new ones for a minute.
   Future<void> findChats(bool listen) =>
       _relayCall('captureConversations', {'enabled': listen});
+  Future<void> setOtherChatsSilent(String packageName, bool silent) =>
+      _relayCall('setOtherChatsSilent', {
+        'packageName': packageName,
+        'silent': silent,
+      });
   Future<void> saveDefaultPreset(VibrationPreset preset) =>
       _relayCall('saveDefaultPreset', {'preset': preset.id});
   Future<void> setPause(int minutes) =>

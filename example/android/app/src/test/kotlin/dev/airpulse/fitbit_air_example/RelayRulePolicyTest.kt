@@ -11,6 +11,23 @@ class RelayRulePolicyTest {
         chats = mapOf("alice" to SavedChat(whatsapp, "Alice", preset = RelayPreset.HIGH),
             "muted" to SavedChat(whatsapp, "Muted", preset = RelayPreset.MUTE), "bob" to SavedChat(whatsapp, "Bob")))
 
+    @Test fun perAppRestrictionsPreserveExistingWhatsAppScope() {
+        val telegram = "org.telegram.messenger"
+        val googleChat = "com.google.android.apps.dynamite"
+        val messages = "com.google.android.apps.messaging"
+        val rules = config.copy(
+            apps = config.apps + listOf(telegram, googleChat, messages).associateWith { RelayAppRule(true) },
+            chats = config.chats + ("team" to SavedChat(telegram, "Team", preset = RelayPreset.DOUBLE)),
+            everyoneElseSilent = true,
+            silentChatApps = setOf(telegram),
+        )
+        assertNull(rules.match(whatsapp, emptySet()))
+        assertNull(rules.match(telegram, emptySet()))
+        assertEquals(RelayMatch(RelayPreset.DOUBLE, 1), rules.match(telegram, setOf("team")))
+        assertEquals(RelayMatch(RelayPreset.CURRENT, 0), rules.match(googleChat, setOf("team")))
+        assertEquals(RelayMatch(RelayPreset.CURRENT, 0), rules.match(messages, emptySet()))
+    }
+
     @Test fun `migration preserves selection and style but backup restore does not reenable stale apps`() {
         val migrated = migrateRelayRules(setOf("com.whatsapp"), "double", false)
         assertEquals(setOf("com.whatsapp"), migrated.selectedPackages)

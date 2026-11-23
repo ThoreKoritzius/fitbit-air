@@ -183,6 +183,10 @@ void main() {
       );
       await tester.tap(find.byKey(const ValueKey('conversation-picker')));
       await tester.pumpAndSettle();
+      final unsaved = find.byKey(const ValueKey('unsaved-chat-settings'));
+      await tester.ensureVisible(unsaved);
+      await tester.tap(unsaved);
+      await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('everyone-else')), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pageBack();

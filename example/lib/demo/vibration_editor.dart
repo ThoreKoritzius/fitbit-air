@@ -6,6 +6,7 @@ Future<void> editVibration(
   BuildContext context,
   DemoController controller, {
   required String title,
+  String? subtitle,
   required VibrationPreset? initial,
   required Future<void> Function(VibrationPreset?) onSave,
   bool allowDefault = true,
@@ -19,6 +20,7 @@ Future<void> editVibration(
   builder: (context) => _VibrationEditor(
     controller: controller,
     title: title,
+    subtitle: subtitle,
     initial: initial,
     onSave: onSave,
     allowDefault: allowDefault,
@@ -32,6 +34,7 @@ class _VibrationEditor extends StatefulWidget {
   const _VibrationEditor({
     required this.controller,
     required this.title,
+    required this.subtitle,
     required this.initial,
     required this.onSave,
     required this.allowDefault,
@@ -41,6 +44,7 @@ class _VibrationEditor extends StatefulWidget {
   });
   final DemoController controller;
   final String title;
+  final String? subtitle;
   final VibrationPreset? initial;
   final Future<void> Function(VibrationPreset?) onSave;
   final bool allowDefault, allowMute;
@@ -53,6 +57,7 @@ class _VibrationEditor extends StatefulWidget {
 class _VibrationEditorState extends State<_VibrationEditor> {
   late VibrationPreset? selected = widget.initial;
   bool working = false;
+  bool saving = false;
   String? error;
   String? feedback;
   @override
@@ -74,6 +79,7 @@ class _VibrationEditorState extends State<_VibrationEditor> {
   Future<void> run(Future<void> Function() action, {bool save = false}) async {
     setState(() {
       working = true;
+      saving = save;
       error = null;
       feedback = null;
     });
@@ -93,7 +99,12 @@ class _VibrationEditorState extends State<_VibrationEditor> {
         );
       }
     } finally {
-      if (mounted) setState(() => working = false);
+      if (mounted) {
+        setState(() {
+          working = false;
+          saving = false;
+        });
+      }
     }
   }
 
@@ -102,113 +113,156 @@ class _VibrationEditorState extends State<_VibrationEditor> {
     final inherited =
         widget.inheritedPreset ?? widget.controller.settings.defaultPreset;
     final effective = selected ?? inherited;
+    final quiet =
+        widget.controller.relayRunning &&
+        widget.controller.settings.silenceReason != null;
+    final canPreview =
+        !working &&
+        !widget.controller.busy &&
+        !widget.controller.previewing &&
+        !widget.controller.changingRelay &&
+        !quiet &&
+        effective != VibrationPreset.mute;
     return FractionallySizedBox(
       heightFactor: .9,
-      child: ListView(
-        padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  widget.title,
-                  style: Theme.of(context).textTheme.headlineSmall,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 12, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.title,
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      if (widget.subtitle case final subtitle?)
+                        Text(
+                          subtitle,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-              IconButton(
-                tooltip: 'Close',
-                onPressed: working ? null : () => Navigator.pop(context),
-                icon: const Icon(Icons.close),
-              ),
-            ],
+                IconButton(
+                  tooltip: 'Close',
+                  onPressed: working ? null : () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 8),
-          const Text('Choose a vibration. Trying it does not save changes.'),
-          if (widget.allowDefault)
-            ListTile(
-              key: const ValueKey('preset-default'),
-              title: Text(widget.inheritLabel),
-              subtitle: Text(inherited.label),
-              leading: Icon(
-                selected == null
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_off,
-              ),
-              onTap: working ? null : () => setState(() => selected = null),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              children: [
+                if (widget.allowDefault)
+                  ListTile(
+                    key: const ValueKey('preset-default'),
+                    title: Text(widget.inheritLabel),
+                    subtitle: Text(inherited.label),
+                    leading: Icon(
+                      selected == null
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_off,
+                    ),
+                    onTap: working
+                        ? null
+                        : () => setState(() => selected = null),
+                  ),
+                for (final preset in VibrationPreset.values.where(
+                  (p) => widget.allowMute || p != VibrationPreset.mute,
+                ))
+                  ListTile(
+                    key: ValueKey('preset-${preset.id}'),
+                    title: Text(preset.label),
+                    subtitle: Text(preset.description),
+                    leading: Icon(
+                      selected == preset
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_off,
+                    ),
+                    onTap: working
+                        ? null
+                        : () => setState(() => selected = preset),
+                  ),
+              ],
             ),
-          for (final preset in VibrationPreset.values.where(
-            (p) => widget.allowMute || p != VibrationPreset.mute,
-          ))
-            ListTile(
-              key: ValueKey('preset-${preset.id}'),
-              title: Text(preset.label),
-              subtitle: Text(preset.description),
-              leading: Icon(
-                selected == preset
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_off,
-              ),
-              onTap: working ? null : () => setState(() => selected = preset),
-            ),
-          if (effective.intensity != null)
-            const Padding(
-              padding: EdgeInsets.all(12),
-              child: Text(
-                'Low and high change the band’s vibration strength. It keeps that strength afterward, including for other apps.',
-              ),
-            ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            key: const ValueKey('preview-rule'),
-            onPressed:
-                working ||
-                    widget.controller.busy ||
-                    widget.controller.previewing ||
-                    widget.controller.changingRelay ||
-                    (widget.controller.relayRunning &&
-                        widget.controller.settings.silenceReason != null) ||
-                    effective == VibrationPreset.mute
-                ? null
-                : () => run(() => widget.controller.previewPreset(effective)),
-            icon: working
-                ? const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.vibration),
-            label: Text(working ? 'Working…' : 'Try this vibration'),
           ),
-          if (widget.controller.relayRunning &&
-              widget.controller.settings.silenceReason != null)
-            const Text(
-              'Resume notifications or leave quiet hours before trying a vibration.',
-            ),
-          if (feedback != null)
-            Semantics(liveRegion: true, child: Text(feedback!)),
-          if (error != null)
-            Semantics(
-              liveRegion: true,
-              child: Text(
-                error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+          const Divider(height: 1),
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (effective.intensity != null)
+                    Text(
+                      'Low and high change the band’s vibration strength. It keeps that strength afterward, including for other apps.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  if (quiet)
+                    const Text(
+                      'Resume notifications or leave quiet hours before trying a vibration.',
+                    ),
+                  if (feedback != null)
+                    Semantics(liveRegion: true, child: Text(feedback!)),
+                  if (error != null)
+                    Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        error!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    ),
+                  OverflowBar(
+                    alignment: MainAxisAlignment.end,
+                    spacing: 8,
+                    overflowSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        key: const ValueKey('preview-rule'),
+                        onPressed: canPreview
+                            ? () => run(
+                                () =>
+                                    widget.controller.previewPreset(effective),
+                              )
+                            : null,
+                        icon: working && !saving
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.vibration),
+                        label: Text(
+                          working && !saving ? 'Trying…' : 'Try vibration',
+                        ),
+                      ),
+                      FilledButton(
+                        key: const ValueKey('save-rule'),
+                        onPressed: working
+                            ? null
+                            : () => run(
+                                () => widget.onSave(selected),
+                                save: true,
+                              ),
+                        child: Text(saving ? 'Saving…' : 'Save'),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
-          const SizedBox(height: 12),
-          FilledButton(
-            key: const ValueKey('save-rule'),
-            onPressed: working
-                ? null
-                : () => run(() => widget.onSave(selected), save: true),
-            child: const Text('Save'),
           ),
-          if (widget.allowMute)
-            const Padding(
-              padding: EdgeInsets.only(top: 12),
-              child: Text(
-                'Use app default removes the custom override. Selected-chat restrictions still apply.',
-              ),
-            ),
-          SizedBox(height: MediaQuery.viewInsetsOf(context).bottom + 16),
         ],
       ),
     );
