@@ -39,6 +39,8 @@ package: it turns phone notifications into a gentle vibration on your Fitbit Air
   notification access in its guided setup.
 - **Private by design:** no internet permission, no backup; notifications are
   matched on the phone and never stored. See the [privacy policy](PRIVACY.md).
+- **Use BuzzKill rules:** send matching alerts to the Air with the optional
+  [Tasker bridge](doc/buzzkill.md).
 
 <br clear="right">
 

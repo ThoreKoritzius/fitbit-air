@@ -40,6 +40,20 @@ class CalendarNotificationListener : NotificationListenerService() {
             .onFailure { RelayConversations.captureError() }
         val relay = CalendarRelayService.active ?: return
         if (!relay.acceptsPackage(sbn.packageName)) return
+        if (sbn.packageName == TaskerRelaySignal.PACKAGE && TaskerRelaySignal.isTriggerTitle(
+                sbn.notification.extras.getCharSequence(Notification.EXTRA_TITLE),
+            )) {
+            val timestamp = TaskerRelaySignal.timestamp(
+                sbn.notification.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString(),
+                sbn.postTime,
+            ) ?: return
+            relay.onAlert(
+                sbn.packageName, sbn.key, sbn.postTime, sbn.isOngoing,
+                sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0,
+                timestamp, emptySet(),
+            )
+            return
+        }
         // Opt-in: the text stays local to this call; only the tone reaches the relay.
         val tone = if (!relay.toneEnabled) null else runCatching {
             val ranking = NotificationListenerService.Ranking()
