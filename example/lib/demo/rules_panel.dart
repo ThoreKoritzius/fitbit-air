@@ -101,6 +101,7 @@ class _RulesPanelState extends State<RulesPanel> {
         SwitchListTile(
           key: const ValueKey('only-while-asleep'),
           contentPadding: EdgeInsets.zero,
+          secondary: const Icon(Icons.screen_lock_portrait),
           title: const Text('Only relay while the phone is asleep'),
           subtitle: const Text('Skip notifications while the phone is awake.'),
           value: state.settings.onlyWhileAsleep,
