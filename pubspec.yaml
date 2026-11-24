@@ -1,6 +1,6 @@
 name: fitbit_air
 description: Experimental Android Bluetooth access to Fitbit Air, including haptics, live heart rate, device information, and diagnostics.
-version: 0.2.1
+version: 0.2.2
 homepage: https://github.com/ThoreKoritzius/fitbit-air
 repository: https://github.com/ThoreKoritzius/fitbit-air
 issue_tracker: https://github.com/ThoreKoritzius/fitbit-air/issues
@@ -16,6 +16,7 @@ environment:
 
 dependencies:
   clock: ^1.1.2
+  crypto: ^3.0.7
   flutter:
     sdk: flutter
 

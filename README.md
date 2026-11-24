@@ -62,7 +62,7 @@ Or add it to `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  fitbit_air: ^0.2.1
+  fitbit_air: ^0.2.2
 ```
 
 To try unreleased changes, depend on the Git repository instead:
@@ -254,20 +254,19 @@ For alerts from push messages or other apps, queue commands through
 serializes commands and drops duplicates and expired ones. It retries only a
 failure that guarantees nothing reached the Air (`HANDSHAKE_TIMEOUT`: the
 secure session never started), once, after 3 s; a lost or ambiguous result
-is never retried:
+is never retried. Use `AirHapticCommand.fromEventKey` to derive a stable ID from
+your source and message ID, even when the message ID exceeds 128 characters.
 
 ```dart
 final haptics = AirHapticDispatcher();
 
-await haptics.submit(AirHapticCommand(
-  id: messageId,
+await haptics.submit(AirHapticCommand.fromEventKey(
+  source: 'my-app.messages',
+  eventKey: messageId,
   expiresAt: DateTime.now().add(const Duration(seconds: 30)),
   kind: AirHapticKind.tap,
 ));
 ```
-
-`id` must be 1–128 characters; hash longer keys (such as Android notification
-keys) first.
 
 Receiving notifications and keeping your app alive in the background are up
 to your app; see [background integration](doc/background.md). The example app

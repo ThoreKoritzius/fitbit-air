@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 
 import 'package:clock/clock.dart';
+import 'package:crypto/crypto.dart';
 
 import 'fitbit_air.dart';
 
@@ -19,8 +21,9 @@ enum AirHapticKind {
 
 /// A host-authenticated command with an application-assigned unique ID.
 ///
-/// [id] must be 1–128 characters. Hash longer natural keys first: Android
-/// `StatusBarNotification.key` values, for example, can exceed 128.
+/// A caller-assigned [id] must be nonblank and at most 128 UTF-16 code units.
+/// Use [AirHapticCommand.fromEventKey] for long keys such as Android
+/// `StatusBarNotification.key` values.
 ///
 /// Authenticate/authorize the sender before constructing this. The SDK does
 /// not authenticate push payloads, request notification access, or wake an app.
@@ -39,6 +42,36 @@ class AirHapticCommand {
     }
   }
 
+  /// Creates a command ID from a stable [source] namespace and [eventKey].
+  ///
+  /// The ID is the lowercase SHA-256 hex digest of the UTF-8 encoded JSON
+  /// array `[source, eventKey]`. Both inputs must be nonblank. Use the same
+  /// pair for retries and a distinct event key for each new message. For
+  /// example, if Android reuses a notification key for a whole conversation,
+  /// include a stable message ID or original message timestamp in [eventKey].
+  factory AirHapticCommand.fromEventKey({
+    required String source,
+    required String eventKey,
+    required DateTime expiresAt,
+    AirHapticKind kind = AirHapticKind.preview,
+    HapticIntensity? intensity,
+  }) {
+    if (source.trim().isEmpty) {
+      throw ArgumentError('source must not be blank.');
+    }
+    if (eventKey.trim().isEmpty) {
+      throw ArgumentError('eventKey must not be blank.');
+    }
+    final encoded = utf8.encode(jsonEncode([source, eventKey]));
+    return AirHapticCommand(
+      id: sha256.convert(encoded).toString(),
+      expiresAt: expiresAt,
+      kind: kind,
+      intensity: intensity,
+    );
+  }
+
+  /// A nonblank ID of at most 128 UTF-16 code units.
   final String id;
   final DateTime expiresAt;
   final AirHapticKind kind;
