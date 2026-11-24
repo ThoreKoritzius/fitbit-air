@@ -253,6 +253,9 @@ class CalendarRelayService : Service() {
         if (packageName == dialer) return true
         return runCatching {
             packageManager.getApplicationInfo(packageName, 0).flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM != 0
+        }.onFailure {
+            // Hidden by package visibility: the manifest queries in-call screens so this stays rare.
+            android.util.Log.i("AirRelay", "call app $packageName not visible: ${it.javaClass.simpleName}")
         }.getOrDefault(false)
     }
 

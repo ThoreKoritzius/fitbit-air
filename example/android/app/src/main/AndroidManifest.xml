@@ -70,6 +70,14 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
+        <!-- Phone apps and in-call screens (Samsung, Xiaomi and OPPO show incoming
+             calls from a separate system app), so incoming calls can be recognized. -->
+        <intent>
+            <action android:name="android.telecom.InCallService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+        </intent>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>

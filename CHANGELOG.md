@@ -1,3 +1,14 @@
+## Unreleased
+
+### Example app
+
+- **Incoming calls on Android 13 and older:** calls were only recognized on
+  Android 14 and newer, so they never buzzed on older phones. They are now
+  recognized on every supported version.
+- **Phones that show calls from a separate in-call app** (Samsung, Xiaomi,
+  OPPO and others): Air Relay can now see that app, so its calls count as phone
+  calls without selecting anything under Apps.
+
 ## 0.4.0
 
 ### Package

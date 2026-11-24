@@ -19,7 +19,16 @@ internal class RelayRingingCalls {
 
 /** Which ringing calls may buzz. */
 internal object RelayCallPolicy {
-    const val INCOMING = 1 // Notification.CallStyle.CALL_TYPE_INCOMING
+    // Notification.CallStyle.CALL_TYPE_*, spelled out so older Android never needs CallStyle.
+    const val INCOMING = 1
+    const val ONGOING = 2
+    const val SCREENING = 3
+
+    /**
+     * Notification.EXTRA_CALL_TYPE. Public from Android 14, but CallStyle
+     * (Android 12+) already writes it, and the key reads as absent before that.
+     */
+    const val EXTRA_CALL_TYPE = "android.callType"
 
     /**
      * The call type of a call notification, or 0. Apps using CallStyle say so
