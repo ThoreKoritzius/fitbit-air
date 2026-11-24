@@ -11,6 +11,14 @@
   access, still turns it off for good. Activity shows each automatic resume
   and why.
 
+## 0.2.2
+
+### Package
+
+- Add `AirHapticCommand.fromEventKey` to derive a stable command ID from a
+  source namespace and event key, including notification keys longer than 128
+  UTF-16 code units. Use the same inputs for retries to preserve deduplication.
+
 ## 0.2.1
 
 ### Package
