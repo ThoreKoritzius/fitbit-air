@@ -2,6 +2,8 @@ name: Release Air Relay
 
 # Builds Air Relay for a version tag (v1.2.3) and attaches the signed APK to
 # the GitHub release. Also uploads the App Bundle for Google Play.
+# Without the AIR_RELAY_* secrets it is skipped, not failed: releases are then
+# built and signed locally (see doc/release.md).
 on:
   push:
     tags: ['v*']
@@ -11,7 +13,26 @@ permissions:
   contents: write
 
 jobs:
+  key:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - id: check
+        env:
+          KEYSTORE_BASE64: ${{ secrets.AIR_RELAY_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No AIR_RELAY_* release-key secrets, so nothing is built here. Build and sign the release locally (see doc/release.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
   release:
+    needs: key
+    # Never publish a debug-signed build: without the key, skip.
+    if: needs.key.outputs.ready == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,11 +50,6 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.AIR_RELAY_KEYSTORE_BASE64 }}
         run: |
-          # Never publish a debug-signed build.
-          if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "::error::Add the AIR_RELAY_* release-key secrets first (see doc/release.md)."
-            exit 1
-          fi
           echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/air-relay.jks"
           echo "AIR_RELAY_KEYSTORE=$RUNNER_TEMP/air-relay.jks" >> "$GITHUB_ENV"
       - name: Build APK and App Bundle
