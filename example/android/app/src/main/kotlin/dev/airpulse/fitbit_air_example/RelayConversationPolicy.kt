@@ -1,11 +1,20 @@
 package dev.airpulse.fitbit_air_example
 
-/** Match only explicitly selected rule IDs. No inspection of sender-message history. */
+/**
+ * Chat rules work for any app that posts conversation notifications, such as
+ * WhatsApp, Signal, Telegram or Google Messages. No inspection of sender-message history.
+ */
 internal object RelayConversationPolicy {
-    val packages = setOf("com.whatsapp", "com.whatsapp.w4b")
+    /** Kept from before chat rules covered every app; "Everyone else: silent" meant these. */
+    val whatsappPackages = setOf("com.whatsapp", "com.whatsapp.w4b")
 
-    fun accepts(packageName: String, restricted: Boolean, allowed: Set<String>, id: String?): Boolean =
-        packageName !in packages || !restricted || (id != null && id in allowed)
+    /** Titles that name the app rather than a chat, so they can never become a name rule. */
+    private val genericTitles = setOf("whatsapp", "whatsapp business")
+
+    fun isAppTitle(title: String, appLabel: String?): Boolean {
+        val normalized = title.trim().lowercase()
+        return normalized in genericTitles || (appLabel != null && normalized == appLabel.trim().lowercase())
+    }
 }
 
 internal data class ConversationIdentity(val id: String, val kind: String)
@@ -15,15 +24,18 @@ internal object RelayConversationIdentity {
     private fun hash(value: String) = java.security.MessageDigest.getInstance("SHA-256")
         .digest(value.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it.toInt() and 255) }
 
-    fun options(packageName: String, shortcut: String?, title: String?, messaging: Boolean): List<ConversationIdentity> {
-        if (packageName !in RelayConversationPolicy.packages) return emptyList()
+    /**
+     * [messaging] is whether the notification looks like a conversation (MessagingStyle or
+     * the message category); only then may its title become a name rule.
+     */
+    fun options(packageName: String, shortcut: String?, title: String?, messaging: Boolean, appLabel: String? = null): List<ConversationIdentity> {
         val result = mutableListOf<ConversationIdentity>()
         if (!shortcut.isNullOrBlank()) {
             // Preserve IDs selected by the first version of this feature.
             result += ConversationIdentity(hash("$packageName\u0000$shortcut"), "shortcut")
         }
         if (messaging && !title.isNullOrBlank() && title.length <= 512 &&
-            title.lowercase() !in setOf("whatsapp", "whatsapp business")) {
+            !RelayConversationPolicy.isAppTitle(title, appLabel)) {
             result += ConversationIdentity(hash("name\u0000$packageName\u0000$title"), "name")
         }
         return result

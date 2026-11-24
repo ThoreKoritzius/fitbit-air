@@ -19,14 +19,14 @@ and the `fitbit_air` Flutter package it is built on.
 
 | Access | Why | What is kept |
 |---|---|---|
-| Notifications from all apps (Android notification access) | To match notifications against your rules and decide whether to vibrate your Air | Nothing from the content. A short local history keeps the app's package name, time, result, chosen vibration and, if you turn on **Message tone**, the category (urgent, negative or neutral). |
-| Message text (only with **Message tone** on) | Classified on the phone, in memory, to choose a vibration | Only the category above; the text is discarded immediately |
-| WhatsApp chat names (only if you choose people) | To vibrate only for the chats you pick | The chat names and identifiers you select |
+| Notifications from all apps (Android notification access) | To match notifications against your rules and decide whether to vibrate your Air | Nothing from the content. A short local history keeps the app's package name, time, result, chosen vibration and, if you use **Message tone** or **Keywords**, the category (urgent, negative, neutral or keyword). |
+| Message text (only with **Message tone** on or **Keywords** added) | Checked on the phone, in memory, to choose a vibration | Only the category above; the text is discarded immediately |
+| Chat names in your chat apps (only if you save chats) | To give the chats you pick their own vibration, or to buzz only for them | The chat names and identifiers you save |
 | Nearby devices (Bluetooth) | To connect to your paired Fitbit Air and send vibrations, read its battery, firmware version and signal strength | The last battery reading and firmware version |
 | Notifications (posting) | To show the running relay with pause and stop controls | Nothing |
 
-The app also stores your settings: selected apps, vibration rules, quiet hours
-and setup progress.
+The app also stores your settings: selected apps, vibration rules, your
+keywords, quiet hours and setup progress.
 
 ## Where data is stored
 

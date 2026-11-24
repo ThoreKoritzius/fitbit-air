@@ -149,10 +149,13 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
       final controller = DemoController()
-        ..apps = List.generate(
-          100,
-          (index) => {'packageName': 'app.$index', 'label': 'App $index'},
-        );
+        ..apps = [
+          {'packageName': 'com.whatsapp', 'label': 'WhatsApp'},
+          ...List.generate(
+            100,
+            (index) => {'packageName': 'app.$index', 'label': 'App $index'},
+          ),
+        ];
       addTearDown(controller.dispose);
       await tester.pumpWidget(
         MaterialApp(
@@ -183,21 +186,21 @@ void main() {
       );
       await tester.tap(find.byKey(const ValueKey('conversation-picker')));
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('everyone-else')), findsOneWidget);
+      expect(find.byKey(const ValueKey('add-chat')), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pageBack();
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('app-search')),
-        200,
-        scrollable: find.byType(Scrollable).first,
-      );
+      await tester.ensureVisible(find.byKey(const ValueKey('app-picker')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('app-picker')));
+      await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('app-search')), findsOneWidget);
       await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('conversation-picker')),
-        -200,
+        find.byKey(const ValueKey('refresh-apps')),
+        400,
         scrollable: find.byType(Scrollable).first,
       );
+      expect(find.byKey(const ValueKey('refresh-apps')), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );

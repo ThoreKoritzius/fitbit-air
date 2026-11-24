@@ -9,7 +9,7 @@ import android.os.Looper
 import org.json.JSONArray
 
 /**
- * Finds chats from WhatsApp notifications so the user can save them; saved chats
+ * Finds chats from the selected apps' conversation notifications so the user can save them; saved chats
  * live in [RelayRuleStore]. Metadata only: no message text is read, stored or exported.
  */
 internal object RelayConversations {
@@ -20,6 +20,8 @@ internal object RelayConversations {
     private val window = ConversationCaptureWindow()
     private val diagnostics = linkedMapOf<String, Int>()
     private var unsupported = 0
+    /** Apps that were on when finding started; chats are only offered from these. */
+    private var capturePackages = emptySet<String>()
     private val handler = Handler(Looper.getMainLooper())
     private val expiry = Runnable { finishCapture() }
     private val clearResults = Runnable { candidates.clear() }
@@ -47,13 +49,18 @@ internal object RelayConversations {
         (notification.extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)
             ?: notification.extras.getCharSequence(Notification.EXTRA_TITLE))?.toString()
 
-    private fun options(packageName: String, notification: Notification): List<ConversationIdentity> =
-        RelayConversationIdentity.options(packageName,
-            if (Build.VERSION.SDK_INT >= 26) notification.shortcutId else null,
-            title(notification), notification.extras.containsKey(Notification.EXTRA_MESSAGES))
+    private fun shortcut(notification: Notification) = if (Build.VERSION.SDK_INT >= 26) notification.shortcutId else null
 
-    fun identities(packageName: String, notification: Notification): Set<String> =
-        if (packageName !in RelayConversationPolicy.packages) emptySet() else runCatching { options(packageName, notification).map { it.id }.toSet() }.getOrDefault(emptySet())
+    /** MessagingStyle or the message category: the notification is about a conversation. */
+    private fun conversational(notification: Notification) =
+        notification.extras.containsKey(Notification.EXTRA_MESSAGES) || notification.category == Notification.CATEGORY_MESSAGE
+
+    private fun options(packageName: String, notification: Notification, appLabel: String?): List<ConversationIdentity> =
+        RelayConversationIdentity.options(packageName, shortcut(notification), title(notification),
+            conversational(notification), appLabel)
+
+    fun identities(packageName: String, notification: Notification, appLabel: String?): Set<String> =
+        runCatching { options(packageName, notification, appLabel).map { it.id }.toSet() }.getOrDefault(emptySet())
 
     private fun count(key: String) { diagnostics[key] = minOf(1000, (diagnostics[key] ?: 0) + 1) }
     fun captureError() { if (window.listening(SystemClock.elapsedRealtime())) count("errors") }
@@ -65,6 +72,7 @@ internal object RelayConversations {
             }
         }
         if (!enabled) { finishCapture(); return }
+        capturePackages = RelayRuleStore.read(context).selectedPackages
         candidates.clear()
         diagnostics.clear()
         diagnostics["seen"] = 0
@@ -90,13 +98,16 @@ internal object RelayConversations {
         candidates.clear()
     }
 
-    fun observe(packageName: String, notification: Notification, ongoing: Boolean, existing: Boolean = false) {
-        if (!window.listening(SystemClock.elapsedRealtime()) || packageName !in RelayConversationPolicy.packages) return
+    fun observe(packageName: String, notification: Notification, ongoing: Boolean, appLabel: String?, existing: Boolean = false) {
+        if (!window.listening(SystemClock.elapsedRealtime()) || packageName !in capturePackages) return
+        // Only conversation-like notifications count; a calendar reminder is not a missed chat.
+        if (!conversational(notification) && shortcut(notification).isNullOrBlank() &&
+            packageName !in RelayConversationPolicy.whatsappPackages) return
         count("seen")
         if (existing) count("existing")
         if (ongoing) { count("ongoing"); return }
         if (notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) { count("summary"); return }
-        val options = options(packageName, notification)
+        val options = options(packageName, notification, appLabel)
         val identity = options.firstOrNull()
         if (identity?.kind != "shortcut") { unsupported = minOf(unsupported + 1, 1000); count("missingId") }
         if (identity == null) { count("unusable"); return }

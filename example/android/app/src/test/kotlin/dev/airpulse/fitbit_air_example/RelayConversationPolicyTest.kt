@@ -4,30 +4,21 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class RelayConversationPolicyTest {
-    @Test fun unrestrictedModePreservesExistingAppsIncludingMissingMetadata() {
-        for (pkg in listOf("com.whatsapp", "com.whatsapp.w4b", "com.google.android.calendar")) {
-            assertTrue(RelayConversationPolicy.accepts(pkg, false, emptySet(), null))
-        }
+    @Test fun identitiesWorkForAnyChatAppAndStaySeparatePerApp() {
+        val packages = listOf("com.whatsapp", "org.thoughtcrime.securesms", "org.telegram.messenger",
+            "com.google.android.apps.messaging")
+        val matches = packages.map { RelayConversationIdentity.options(it, "thread-7", "Alice", true) }
+        assertTrue(matches.all { it.map { match -> match.kind } == listOf("shortcut", "name") })
+        assertEquals(8, matches.flatten().map { it.id }.toSet().size)
     }
 
-    @Test fun restrictedModeFailsClosedForEmptyOrUnknownConversation() {
-        for (pkg in RelayConversationPolicy.packages) {
-            assertFalse(RelayConversationPolicy.accepts(pkg, true, emptySet(), "chat"))
-            assertFalse(RelayConversationPolicy.accepts(pkg, true, setOf("chat"), null))
-            assertFalse(RelayConversationPolicy.accepts(pkg, true, setOf("chat"), "other"))
-            assertTrue(RelayConversationPolicy.accepts(pkg, true, setOf("chat"), "chat"))
-        }
-    }
-
-    @Test fun restrictionDoesNotChangeOtherApps() {
-        assertTrue(RelayConversationPolicy.accepts("com.google.android.calendar", true, emptySet(), null))
-    }
-
-    @Test fun selectedChatStillUsesFreshnessAndDuplicateFilter() {
+    @Test fun savedChatStillUsesFreshnessAndDuplicateFilter() {
         val filter = CalendarAlertFilter(1000, selectedPackages = setOf("com.whatsapp"))
+        val config = RelayRuleConfig(apps = mapOf("com.whatsapp" to RelayAppRule(true)),
+            chats = mapOf("alice" to SavedChat("com.whatsapp", "Alice")), onlySavedChats = setOf("com.whatsapp"))
         fun accept(key: String, time: Long, id: String?) =
             filter.accept("com.whatsapp", key, time, time, false, false, time) &&
-                RelayConversationPolicy.accepts("com.whatsapp", true, setOf("alice"), id)
+                config.match("com.whatsapp", setOfNotNull(id)) != null
         assertTrue(accept("chat1", 1100, "alice"))
         assertFalse(accept("chat1", 1100, "alice"))
         assertTrue(accept("chat1", 1200, "alice"))
@@ -45,7 +36,6 @@ class RelayConversationPolicyTest {
         assertEquals(stable.last().id, missing.single().id)
         // A stable rule never turns into a name rule implicitly.
         assertNotEquals(stable.first().id, missing.single().id)
-        assertFalse(RelayConversationPolicy.accepts("com.whatsapp", true, setOf(stable.first().id), missing.single().id))
         assertNotEquals(missing.single().id,
             RelayConversationIdentity.options("com.whatsapp.w4b", null, "Alice", true).single().id)
         assertNotEquals(missing.single().id,
@@ -56,7 +46,9 @@ class RelayConversationPolicyTest {
         assertTrue(RelayConversationIdentity.options("com.whatsapp", null, "Alice", false).isEmpty())
         assertTrue(RelayConversationIdentity.options("com.whatsapp", null, "WhatsApp", true).isEmpty())
         assertTrue(RelayConversationIdentity.options("com.whatsapp", null, null, true).isEmpty())
-        assertTrue(RelayConversationIdentity.options("other.app", "id", "Alice", true).isEmpty())
+        // Any app's own name is generic too, using its label from the phone.
+        assertTrue(RelayConversationIdentity.options("org.telegram.messenger", null, "Telegram", true, "Telegram").isEmpty())
+        assertEquals("name", RelayConversationIdentity.options("org.telegram.messenger", null, "Alice", true, "Telegram").single().kind)
     }
 
     @Test fun captureExpiryKeepsResultsAvailableForSelectionButStopsListening() {

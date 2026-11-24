@@ -1,10 +1,12 @@
 package dev.airpulse.fitbit_air_example
 
 import android.content.Context
+import org.json.JSONArray
 import org.json.JSONObject
 
 /** Versioned, app-private settings. Chat identities never enter reports or backups. */
 internal object RelayRuleStore {
+    private val packagePattern = Regex("[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+")
     private fun prefs(context: Context) = context.getSharedPreferences("relay_rules", Context.MODE_PRIVATE)
 
     @Synchronized fun read(context: Context): RelayRuleConfig {
@@ -38,6 +40,10 @@ internal object RelayRuleStore {
         // Configs saved before message tone existed decode with it switched off.
         val tone = json.optJSONObject("tone")
         val calls = json.optJSONObject("calls")
+        // Before chat rules covered every app, one WhatsApp-only switch stood for this list.
+        val onlySaved = json.optJSONArray("onlySavedChats")
+        // Configs saved before keyword rules existed decode with none.
+        val keywords = json.optJSONArray("keywords")
         fun tonePreset(key: String) = if (tone == null || tone.isNull(key)) null else RelayPreset.parse(tone.getString(key))
         return RelayRuleConfig(
             RelayPreset.parse(json.getString("defaultPreset")),
@@ -57,9 +63,18 @@ internal object RelayRuleStore {
             RelaySilence(quiet.getLong("pauseUntil"), quiet.getBoolean("quietEnabled"), quiet.getInt("startMinute"), quiet.getInt("endMinute"),
                 quiet.optBoolean("onlyWhileAsleep")),
             RelayToneRules(tone?.getBoolean("enabled") ?: false, tonePreset("urgent"), tonePreset("negative"), tonePreset("neutral")),
-            if (version == 1) legacy!!.second else json.getBoolean("everyoneElseSilent"),
+            when {
+                version == 1 -> legacyOnlySavedChats(legacy!!.second)
+                onlySaved != null -> (0 until onlySaved.length()).map(onlySaved::getString).toSet()
+                else -> legacyOnlySavedChats(json.getBoolean("everyoneElseSilent"))
+            },
             RelayCallRule(calls?.optBoolean("enabled") ?: false,
                 calls?.optString("preset", RelayPreset.DOUBLE.id)?.let(RelayPreset::parse) ?: RelayPreset.DOUBLE),
+            if (keywords == null) emptyList() else (0 until keywords.length()).map { i ->
+                val rule = keywords.getJSONObject(i)
+                val words = rule.getJSONArray("words")
+                RelayKeywordRule((0 until words.length()).map(words::getString), RelayPreset.parse(rule.getString("preset")))
+            },
         )
     }
 
@@ -73,7 +88,9 @@ internal object RelayRuleStore {
         }
         val s = config.silence
         val json = JSONObject().put("version", 2).put("defaultPreset", config.defaultPreset.id)
-            .put("apps", apps).put("chats", chats).put("everyoneElseSilent", config.everyoneElseSilent)
+            .put("apps", apps).put("chats", chats).put("onlySavedChats", JSONArray(config.onlySavedChats.sorted()))
+            // Kept so an older version reading these settings still knows the WhatsApp choice.
+            .put("everyoneElseSilent", config.everyoneElseSilent)
             .put("silence", JSONObject().put("pauseUntil", s.pauseUntil).put("quietEnabled", s.quietEnabled)
                 .put("startMinute", s.startMinute).put("endMinute", s.endMinute)
                 .put("onlyWhileAsleep", s.onlyWhileAsleep))
@@ -81,6 +98,9 @@ internal object RelayRuleStore {
         val t = config.tone
         json.put("tone", JSONObject().put("enabled", t.enabled).put("urgent", t.urgent?.id ?: JSONObject.NULL)
             .put("negative", t.negative?.id ?: JSONObject.NULL).put("neutral", t.neutral?.id ?: JSONObject.NULL))
+        json.put("keywords", JSONArray(config.keywords.map { rule ->
+            JSONObject().put("words", JSONArray(rule.words)).put("preset", rule.preset.id)
+        }))
         return json
     }
 
@@ -92,7 +112,8 @@ internal object RelayRuleStore {
         val next = change(read(context))
         require(next.chats.size <= 64)
         require(next.defaultPreset != RelayPreset.MUTE)
-        require(next.apps.keys.all { it != context.packageName && it.matches(Regex("[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+")) })
+        require(next.onlySavedChats.all { it.matches(packagePattern) })
+        require(next.apps.keys.all { it != context.packageName && it.matches(packagePattern) })
         write(context, next)
         CalendarRelayService.active?.settingsChanged()
     }
@@ -105,7 +126,7 @@ internal object RelayRuleStore {
                 mapOf("id" to id, "packageName" to chat.packageName, "label" to chat.label, "kind" to chat.kind,
                     "preset" to chat.preset?.id)
             },
-            "everyoneElseSilent" to c.everyoneElseSilent,
+            "onlySavedChats" to c.onlySavedChats.sorted(),
             "pauseUntil" to c.silence.pauseUntil, "quietEnabled" to c.silence.quietEnabled,
             "startMinute" to c.silence.startMinute, "endMinute" to c.silence.endMinute,
             "onlyWhileAsleep" to c.silence.onlyWhileAsleep,
@@ -113,6 +134,7 @@ internal object RelayRuleStore {
             "callAlertsSupported" to (android.os.Build.VERSION.SDK_INT >= 34),
             "callAlertsEnabled" to c.calls.enabled, "callPreset" to c.calls.preset.id,
             "toneEnabled" to c.tone.enabled, "toneUrgent" to c.tone.urgent?.id,
-            "toneNegative" to c.tone.negative?.id, "toneNeutral" to c.tone.neutral?.id)
+            "toneNegative" to c.tone.negative?.id, "toneNeutral" to c.tone.neutral?.id,
+            "keywordRules" to c.keywords.map { mapOf("words" to it.words, "preset" to it.preset.id) })
     }
 }

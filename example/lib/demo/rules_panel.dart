@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'apps_page.dart';
+import 'chats_page.dart';
 import 'demo_controller.dart';
-import 'app_icon.dart';
-import 'app_selection_buttons.dart';
-import 'conversation_picker.dart';
-import 'relay_settings.dart';
+import 'keywords_page.dart';
+import 'message_tone_page.dart';
+import 'settings_section.dart';
 import 'vibration_editor.dart';
 
-class RulesPanel extends StatefulWidget {
+/// The Rules tab: an overview of what buzzes, how, and when it stays quiet.
+/// Long lists (apps, chats, keyword rules) live on their own pages.
+class RulesPanel extends StatelessWidget {
   const RulesPanel({
     super.key,
     required this.controller,
@@ -16,363 +19,216 @@ class RulesPanel extends StatefulWidget {
   final DemoController controller;
   final ScrollController? scrollController;
   final void Function(Future<void> Function()) perform;
-  @override
-  State<RulesPanel> createState() => _RulesPanelState();
-}
-
-class _RulesPanelState extends State<RulesPanel> {
-  Set<String>? _selectedAtSort;
-
-  @override
-  void didUpdateWidget(covariant RulesPanel oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.controller != widget.controller) {
-      _selectedAtSort = null;
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
-    final state = widget.controller;
-    // Keep rows under the user's finger until they explicitly regroup or leave.
-    if (state.apps.isNotEmpty) {
-      _selectedAtSort ??= Set.of(state.selectedApps);
-    }
-    final selectedAtSort = _selectedAtSort ?? <String>{};
-    final apps = state.filteredApps.toList()
-      ..sort((a, b) {
-        final selected =
-            (selectedAtSort.contains(b['packageName']) ? 1 : 0) -
-            (selectedAtSort.contains(a['packageName']) ? 1 : 0);
-        if (selected != 0) return selected;
-        final label = (a['label'] as String).toLowerCase().compareTo(
-          (b['label'] as String).toLowerCase(),
-        );
-        return label != 0
-            ? label
-            : (a['packageName'] as String).compareTo(
-                b['packageName'] as String,
-              );
-      });
+    final state = controller;
+    final settings = state.settings;
+    final theme = Theme.of(context);
+    final busy = state.changingRelay;
     return ListView(
       key: const ValueKey('rules-scroll'),
-      controller: widget.scrollController,
-      padding: const EdgeInsets.all(20),
+      controller: scrollController,
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
       children: [
         Text(
           'Rules',
-          style: Theme.of(
-            context,
-          ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 20),
-        ConversationPicker(controller: state, perform: widget.perform),
-        const SizedBox(height: 12),
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          key: const ValueKey('default-vibration'),
-          leading: const Icon(Icons.vibration),
-          title: const Text('Default vibration'),
-          subtitle: Text(state.settings.defaultPreset.label),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => editVibration(
-            context,
-            state,
-            title: 'Default vibration',
-            initial: state.settings.defaultPreset,
-            allowDefault: false,
-            onSave: (preset) => state.saveDefaultPreset(preset!),
+          style: theme.textTheme.headlineMedium?.copyWith(
+            fontWeight: FontWeight.w600,
           ),
         ),
-        const SizedBox(height: 12),
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          key: const ValueKey('quiet-hours'),
-          leading: const Icon(Icons.bedtime_outlined),
-          title: const Text('Quiet hours'),
-          subtitle: Text(
-            state.settings.quietEnabled
-                ? '${formatMinute(context, state.settings.startMinute)} to ${formatMinute(context, state.settings.endMinute)} · Every day'
-                : 'Off · Set a daily time to stay quiet',
+        const SizedBox(height: 4),
+        Text(
+          'Choose what buzzes your Air, how it feels, and when it stays quiet.',
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
           ),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => editQuietHours(context, state),
         ),
-        const SizedBox(height: 12),
-        SwitchListTile(
-          key: const ValueKey('only-while-asleep'),
-          contentPadding: EdgeInsets.zero,
-          secondary: const Icon(Icons.screen_lock_portrait),
-          title: const Text('Only relay while the phone is asleep'),
-          subtitle: const Text('Skip notifications while the phone is awake.'),
-          value: state.settings.onlyWhileAsleep,
-          onChanged: state.changingRelay
-              ? null
-              : (enabled) => widget.perform(
-                  () => state.setOnlyWhileAsleep(enabled),
-                ),
-        ),
-        if (state.settings.callAlertsSupported) ...[
-          SwitchListTile(
-            key: const ValueKey('incoming-calls'),
-            contentPadding: EdgeInsets.zero,
-            secondary: const Icon(Icons.phone_in_talk_outlined),
-            title: const Text('Incoming calls'),
-            subtitle: const Text('Buzz for ringing calls from selected apps.'),
-            value: state.settings.callAlertsEnabled,
-            onChanged: state.changingRelay
-                ? null
-                : (enabled) => widget.perform(
-                    () => state.setCallAlertsEnabled(enabled),
-                  ),
-          ),
-          if (state.settings.callAlertsEnabled)
-            ListTile(
-              key: const ValueKey('call-vibration'),
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.vibration),
-              title: const Text('Call vibration'),
-              subtitle: Text(state.settings.callPreset.label),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: state.changingRelay
-                  ? null
-                  : () => editVibration(
-                      context,
-                      state,
-                      title: 'Call vibration',
-                      initial: state.settings.callPreset,
-                      allowDefault: false,
-                      onSave: (preset) => state.saveCallPreset(preset!),
-                    ),
-            ),
-          const SizedBox(height: 12),
-        ],
-        ..._toneRules(context, state, widget.perform),
         const SizedBox(height: 24),
-        Text('Your apps', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 8),
-        TextFormField(
-          key: const ValueKey('app-search'),
-          initialValue: state.appSearch,
-          decoration: const InputDecoration(
-            labelText: 'Search apps',
-            prefixIcon: Icon(Icons.search),
-          ),
-          onChanged: state.searchApps,
-        ),
-        AppSelectionButtons(
-          controller: state,
-          blocked: state.changingRelay,
-          perform: widget.perform,
-          onSelectedFirst: () =>
-              setState(() => _selectedAtSort = Set.of(state.selectedApps)),
-        ),
-        if (state.filteredApps.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(12),
-            child: Text(
-              'No matching apps. Try another search or refresh the list.',
+        SettingsSection(
+          title: 'What buzzes',
+          children: [
+            ListTile(
+              key: const ValueKey('app-picker'),
+              leading: const Icon(Icons.apps),
+              title: const Text('Apps'),
+              subtitle: Text(_appsSummary(state)),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () =>
+                  _open(context, AppsPage(controller: state, perform: perform)),
             ),
-          ),
-        for (final app in apps)
-          Builder(
-            builder: (context) {
-              final pkg = app['packageName']! as String;
-              final rule = state.settings.apps[pkg];
-              final enabled = state.selectedApps.contains(pkg);
-              final preset = rule?.preset;
-              final icon = app['icon'] as String?;
-              return ListTile(
-                key: ValueKey('app-$pkg'),
-                contentPadding: EdgeInsets.zero,
-                leading: AppIcon(encoded: icon),
-                title: Text(app['label']! as String),
+            ChatsRow(controller: state),
+            ListTile(
+              key: const ValueKey('keyword-rules'),
+              leading: const Icon(Icons.label_important_outline),
+              title: const Text('Keywords'),
+              subtitle: Text(keywordsSummary(settings)),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _open(context, KeywordsPage(controller: state)),
+            ),
+            if (settings.callAlertsSupported)
+              ListTile(
+                key: const ValueKey('call-vibration'),
+                leading: const Icon(Icons.phone_in_talk_outlined),
+                title: const Text('Incoming calls'),
                 subtitle: Text(
-                  '${enabled ? "On" : "Off"} · ${preset?.label ?? "Default: ${state.settings.defaultPreset.label}"}',
+                  settings.callAlertsEnabled
+                      ? '${settings.callPreset.label} · From your apps'
+                      : 'Off',
                 ),
                 trailing: Switch(
-                  key: ValueKey('app-enabled-$pkg'),
-                  value: enabled,
-                  onChanged: state.changingRelay
+                  key: const ValueKey('incoming-calls'),
+                  value: settings.callAlertsEnabled,
+                  onChanged: busy
                       ? null
-                      : (value) => widget.perform(
-                          () => state.saveAppRule(pkg, value, preset),
-                        ),
+                      : (enabled) =>
+                            perform(() => state.setCallAlertsEnabled(enabled)),
                 ),
-                onTap: () => editVibration(
-                  context,
-                  state,
-                  title: app['label']! as String,
-                  initial: preset,
-                  onSave: (value) => state.saveAppRule(pkg, enabled, value),
-                ),
-              );
-            },
-          ),
-        TextButton(
-          key: const ValueKey('refresh-apps'),
-          onPressed: () => widget.perform(state.loadApps),
-          child: const Text('Refresh app list'),
+                onTap: busy
+                    ? null
+                    : settings.callAlertsEnabled
+                    ? () => editVibration(
+                        context,
+                        state,
+                        title: 'Incoming calls',
+                        initial: settings.callPreset,
+                        allowDefault: false,
+                        onSave: (preset) => state.saveCallPreset(preset!),
+                      )
+                    : () => perform(() => state.setCallAlertsEnabled(true)),
+              ),
+          ],
         ),
-        const SizedBox(height: 16),
-        const ExpansionTile(
-          tilePadding: EdgeInsets.zero,
-          title: Text('How alerts work'),
+        SettingsSection(
+          title: 'How it buzzes',
+          footer:
+              'The default is used unless an app, chat or keyword sets its own.',
           children: [
-            Padding(
-              padding: EdgeInsets.only(bottom: 16),
-              child: Text(
-                'Nearby alerts can share one vibration to leave time for Google Health to sync. A saved person’s vibration takes priority, unless message tone marks another alert as urgent.',
+            ListTile(
+              key: const ValueKey('default-vibration'),
+              leading: const Icon(Icons.vibration),
+              title: const Text('Default vibration'),
+              subtitle: Text(settings.defaultPreset.label),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => editVibration(
+                context,
+                state,
+                title: 'Default vibration',
+                initial: settings.defaultPreset,
+                allowDefault: false,
+                onSave: (preset) => state.saveDefaultPreset(preset!),
               ),
             ),
+            ListTile(
+              key: const ValueKey('message-tone-row'),
+              leading: const Icon(Icons.auto_awesome_outlined),
+              title: const Text('Message tone'),
+              subtitle: Text(messageToneSummary(settings)),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _open(context, MessageTonePage(controller: state)),
+            ),
           ],
+        ),
+        SettingsSection(
+          title: 'When it stays quiet',
+          children: [
+            ListTile(
+              key: const ValueKey('quiet-hours'),
+              leading: const Icon(Icons.bedtime_outlined),
+              title: const Text('Quiet hours'),
+              subtitle: Text(
+                settings.quietEnabled
+                    ? '${formatMinute(context, settings.startMinute)} to ${formatMinute(context, settings.endMinute)} · Every day'
+                    : 'Off',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => editQuietHours(context, state),
+            ),
+            SwitchListTile(
+              key: const ValueKey('only-while-asleep'),
+              secondary: const Icon(Icons.screen_lock_portrait),
+              title: const Text('Only when the screen is off'),
+              subtitle: const Text('Stay quiet while you’re using the phone.'),
+              value: settings.onlyWhileAsleep,
+              onChanged: busy
+                  ? null
+                  : (enabled) =>
+                        perform(() => state.setOnlyWhileAsleep(enabled)),
+            ),
+          ],
+        ),
+        Card(
+          child: ExpansionTile(
+            key: const ValueKey('rules-order'),
+            leading: const Icon(Icons.help_outline),
+            title: const Text('Which rule wins?'),
+            childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            expandedCrossAxisAlignment: CrossAxisAlignment.start,
+            children: const [
+              _Step(
+                1,
+                'Apps that are off, muted chats, quiet hours and pauses never buzz.',
+              ),
+              _Step(2, 'A matching keyword picks the vibration.'),
+              _Step(3, 'Otherwise message tone, if it’s on.'),
+              _Step(
+                4,
+                'Otherwise the chat’s vibration, then the app’s, then the default.',
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Messages that arrive close together share one vibration, so Google Health has time to sync.',
+              ),
+            ],
+          ),
         ),
       ],
     );
   }
 }
 
-List<Widget> _toneRules(
-  BuildContext context,
-  DemoController state,
-  void Function(Future<void> Function()) perform,
-) {
-  final s = state.settings;
-  Future<void> save({
-    bool? enabled,
-    VibrationPreset? Function()? urgent,
-    VibrationPreset? Function()? negative,
-    VibrationPreset? Function()? neutral,
-  }) => state.saveToneRules(
-    enabled: enabled ?? s.toneEnabled,
-    urgent: urgent != null ? urgent() : s.toneUrgent,
-    negative: negative != null ? negative() : s.toneNegative,
-    neutral: neutral != null ? neutral() : s.toneNeutral,
-  );
-  Widget row(
-    String key,
-    String title,
-    VibrationPreset? preset,
-    Future<void> Function(VibrationPreset?) onSave,
-  ) => ListTile(
-    key: ValueKey('tone-$key'),
-    contentPadding: const EdgeInsets.only(left: 40),
-    title: Text(title),
-    subtitle: Text(preset?.label ?? 'Keep app or chat vibration'),
-    trailing: const Icon(Icons.chevron_right),
-    onTap: () => editVibration(
-      context,
-      state,
-      title: title,
-      initial: preset,
-      allowMute: true,
-      inheritLabel: 'Keep app or chat vibration',
-      onSave: onSave,
-    ),
-  );
-  final fresh =
-      s.toneUrgent == null && s.toneNegative == null && s.toneNeutral == null;
-  return [
-    SwitchListTile(
-      key: const ValueKey('message-tone'),
-      contentPadding: EdgeInsets.zero,
-      secondary: const Icon(Icons.priority_high),
-      title: Wrap(
-        spacing: 8,
-        runSpacing: 4,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [const Text('Message tone'), _experimentalLabel(context)],
-      ),
-      subtitle: const Text(
-        'Reads message text on this phone to vary the vibration for urgent or negative messages. Text is never stored or shared.',
-      ),
-      value: s.toneEnabled,
-      onChanged: state.changingRelay
-          ? null
-          : (value) async {
-              if (value && !await _confirmMessageTone(context)) return;
-              perform(
-                () => state.saveToneRules(
-                  enabled: value,
-                  // Suggest a starting point the first time it is switched on.
-                  urgent: value && fresh
-                      ? VibrationPreset.doublePulse
-                      : s.toneUrgent,
-                  negative: value && fresh
-                      ? VibrationPreset.high
-                      : s.toneNegative,
-                  neutral: s.toneNeutral,
-                ),
-              );
-            },
-    ),
-    if (s.toneEnabled) ...[
-      row(
-        'urgent',
-        'Urgent',
-        s.toneUrgent,
-        (value) => save(urgent: () => value),
-      ),
-      row(
-        'negative',
-        'Negative',
-        s.toneNegative,
-        (value) => save(negative: () => value),
-      ),
-      row(
-        'neutral',
-        'Everything else',
-        s.toneNeutral,
-        (value) => save(neutral: () => value),
-      ),
-    ],
+void _open(BuildContext context, Widget page) =>
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
+
+String _appsSummary(DemoController state) {
+  if (state.apps.isEmpty) {
+    final count = state.selectedApps.length;
+    return count == 0 ? 'None yet' : '$count on';
+  }
+  final names = [
+    for (final app in state.apps)
+      if (state.selectedApps.contains(app['packageName']))
+        app['label']! as String,
   ];
+  return switch (names.length) {
+    0 => 'None yet · Pick the apps that should buzz',
+    1 => names.single,
+    2 => '${names[0]} and ${names[1]}',
+    _ => '${names[0]}, ${names[1]} and ${names.length - 2} more',
+  };
 }
 
-Widget _experimentalLabel(BuildContext context) {
-  final colors = Theme.of(context).colorScheme;
-  return Container(
-    key: const ValueKey('message-tone-experimental'),
-    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-    decoration: BoxDecoration(
-      border: Border.all(color: colors.outline),
-      borderRadius: BorderRadius.circular(6),
-    ),
-    child: Text(
-      'Experimental',
-      style: Theme.of(
-        context,
-      ).textTheme.labelSmall?.copyWith(color: colors.onSurfaceVariant),
+class _Step extends StatelessWidget {
+  const _Step(this.number, this.text);
+  final int number;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CircleAvatar(
+          radius: 11,
+          child: Text('$number', style: Theme.of(context).textTheme.labelSmall),
+        ),
+        const SizedBox(width: 12),
+        Expanded(child: Text(text)),
+      ],
     ),
   );
 }
-
-/// Explicit consent each time message text reading is switched on.
-Future<bool> _confirmMessageTone(BuildContext context) async =>
-    await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        key: const ValueKey('message-tone-consent'),
-        title: const Text('Read message text?'),
-        content: const Text(
-          'Air Relay will read the text of notifications from your chosen apps to pick a vibration for urgent or negative messages.\n\n'
-          'The text is checked on this phone, in memory, and is never saved or sent; only the category (urgent, negative or neutral) appears in your history. '
-          'It’s experimental and will sometimes misjudge a message. You can turn it off anytime.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            key: const ValueKey('message-tone-confirm'),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Turn on'),
-          ),
-        ],
-      ),
-    ) ??
-    false;
 
 String formatMinute(BuildContext context, int minute) =>
     TimeOfDay(hour: minute ~/ 60, minute: minute % 60).format(context);

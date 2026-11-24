@@ -68,8 +68,9 @@ Data the app *accesses* but does not collect, to explain if asked:
   - vibrations arrive a few seconds after a notification;
   - an Air firmware update can stop it until the app is updated;
   - no internet access, and nothing leaves the phone;
-  - optional, off by default: "vibrate differently for urgent messages
-    (analysed on the phone)". Message tone asks for consent when enabled.
+  - optional, off by default: "vibrate differently for urgent messages or
+    your own keywords (analysed on the phone)". Message tone and the first
+    keyword each ask for consent.
 - **Category:** Tools. **Content rating:** no objectionable content. **Target audience:** 13+.
 - **Ads:** none.
 
