@@ -65,5 +65,12 @@ it.
    - refuses debug-signed output;
    - creates the GitHub release with the APK and its SHA-256 checksum;
    - uploads the bundle as a workflow artifact.
+   Without the `AIR_RELAY_*` secrets the workflow skips the build (it shows a
+   notice, not a failure). Then build locally with `key.properties`:
+   `flutter build apk --release` and
+   `flutter build appbundle --release --dart-define=AIR_RELAY_STORE=true`
+   in `example/`, check both with `apksigner verify --print-certs` and
+   `keytool -printcert -jarfile`, and attach the APK and its `.sha256` to the
+   GitHub release yourself.
 4. Upload the `.aab` to Play: closed testing first, then production.
 5. Publish the package with `dart pub publish` from a clean checkout.
