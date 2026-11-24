@@ -1,16 +1,3 @@
-## Unreleased
-
-### Example app
-
-- The Google Play build (`--dart-define=AIR_RELAY_STORE=true`) leaves out
-  Developer tools; the GitHub APK keeps them.
-- Notifications stay on until you stop them. The relay remembers that you
-  turned it on and resumes by itself after a phone restart, an app update,
-  Android ending it in the background, a temporary notification-listener
-  disconnect, or a stuck command. Stopping it, or turning off notification
-  access, still turns it off for good. Activity shows each automatic resume
-  and why.
-
 ## 0.2.2
 
 ### Package

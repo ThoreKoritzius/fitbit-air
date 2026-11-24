@@ -57,7 +57,8 @@ it.
 
 1. Update the version in `pubspec.yaml` and `example/pubspec.yaml`.
    - Bump the `+build` number every time; Play and Android need a higher one.
-   - Add the release to `CHANGELOG.md`.
+   - Add release notes under the version number in `CHANGELOG.md`. Omit an
+     `Unreleased` section.
 2. Merge to `main`, tag `vX.Y.Z` and push the tag.
 3. The **Release Air Relay** workflow then:
    - builds the APK and the App Bundle;
