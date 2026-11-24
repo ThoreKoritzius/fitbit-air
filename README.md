@@ -16,7 +16,8 @@ same Android phone in the installed Google Health app.
 > This is independent reverse-engineering research, not an official Google or
 > Fitbit SDK. It relies on private, version-sensitive device protocols and on a
 > compatible, authentic Google Health installation. Android arm64 is the only
-> configuration tested so far. Taps on the Air are not reported to the phone.
+> configuration tested so far (Pixel 7 Pro, and Samsung Galaxy A54 in a user
+> report). Taps on the Air are not reported to the phone.
 
 ## Air Relay
 
@@ -297,6 +298,7 @@ rebuilt, as it is after Bluetooth is switched back on.
 
 | Capability | Status |
 |---|---|
+| Tested phones | Pixel 7 Pro (Android 17), throughout. Samsung Galaxy A54 (Exynos, Android 17, Air firmware 67.20001.253.2): `tap()` and a headless notification relay, user report ([#27](https://github.com/ThoreKoritzius/fitbit-air/issues/27)) |
 | Detect an Android-bonded Fitbit Air | Implemented |
 | Trigger a short Air haptic | Physically verified from this package on Pixel 7 Pro (2026-10-14) |
 | Exactly one pulse | `tap()` keeps the wearer's strength; felt as one pulse in every trial on Pixel 7 Pro / firmware 67.20001.253.2. `pulse()` (alternating strength) remains |
@@ -444,8 +446,15 @@ Air's firmware can.
   waits while Google Health is transferring (`channelHold`, at most 10 s), then
   hands the channel back afterward (`channelHandoff`). During 30–90 s research
   captures Google Health cannot sync.
-- The plugin accepts the native implementation only from the expected signed
-  Google Health package; a look-alike package is rejected.
+- Debug logs show `TLS_STATE_ERROR error=-10601` (Golden Gate's
+  `UNKNOWN_IDENTITY`) at the start of some sessions and at the end of every
+  command. This is expected. When the Air offers the identity it shares with
+  Google Health, whose account-bound key this plugin deliberately does not
+  have, the refusal makes it reset and switch to the `BOOTSTRAP` identity
+  (about 0.5 s). The handoff refuses on purpose so the Air switches back for
+  Google Health (`reset_observed`).
+- The plugin ships its own native transport and loads no code from Google
+  Health.
 - Firmware or Google Health updates may change the private protocol.
 - Do not use this package for medical or safety-critical behavior.
 
