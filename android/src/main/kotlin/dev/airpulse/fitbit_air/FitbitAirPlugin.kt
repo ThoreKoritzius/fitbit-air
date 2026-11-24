@@ -80,6 +80,8 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
     private var sessionRxPackets = 0
     private var warmSilenceCheck: Runnable? = null
     private var warmLinkFallback: String? = null
+    /** Set when a command on the warm link got no reply; the link is replaced at cleanup. */
+    private var warmLinkUnresponsive = false
     private var heartRateEvents: EventChannel.EventSink? = null
     private var heartRateStreamGeneration = 0
     private var activity: Activity? = null
@@ -1221,7 +1223,7 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
                 if (response.responseCode.responseClass.toInt() != 2 ||
                     !(body.contentEquals(byteArrayOf(10, 4, 10, 2, 8, 2)) ||
                         body.contentEquals(byteArrayOf(10, 4, 10, 2, 8, 3)))
-                ) throw IllegalStateException("Air returned an unsupported haptic setting.")
+                ) throw AirCommandFailure.Answered("Air returned an unsupported haptic setting.")
                 body.last().toInt()
             }
         }
@@ -1230,19 +1232,21 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
         disposables.add(readIntensity(coap).subscribe({ intensity ->
             finishSessionSuccess(coap, mapOf("intensity" to intensity))
         }, { error ->
-            finishSessionError(coap, "HAPTIC_READ_FAILED", error.message ?: "Could not read haptic intensity.")
+            finishSessionError(coap, AirCommandFailure.code(error, sent = false, answeredCode = "HAPTIC_READ_FAILED"),
+                error.message ?: "Could not read haptic intensity.")
         }))
     }
 
     private fun runSetHapticIntensity(coap: CoapEndpoint, requested: Int) {
+        var sent = false
         disposables.add(readIntensity(coap).flatMap { previous ->
             if (previous == requested) {
                 Single.just(previous to false)
             } else {
-                writeIntensity(coap, requested)
+                Single.defer { sent = true; writeIntensity(coap, requested) }
                     .flatMap { readIntensity(coap) }
                     .map { verified ->
-                        if (verified != requested) throw IllegalStateException("Haptic intensity verification failed.")
+                        if (verified != requested) throw AirCommandFailure.Answered("Haptic intensity verification failed.")
                         previous to true
                     }
             }
@@ -1256,18 +1260,20 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
                 ),
             )
         }, { error ->
-            finishSessionError(coap, "HAPTIC_WRITE_FAILED", error.message ?: "Could not set haptic intensity.")
+            finishSessionError(coap, AirCommandFailure.code(error, sent, answeredCode = "HAPTIC_WRITE_FAILED"),
+                error.message ?: "Could not set haptic intensity.")
         }))
     }
 
     /** One physical pulse: toggle to the other intensity and intentionally leave it there. */
     private fun runSinglePulse(coap: CoapEndpoint) {
+        var sent = false
         disposables.add(readIntensity(coap).flatMap { previous ->
             val current = if (previous == 2) 3 else 2
-            writeIntensity(coap, current)
+            Single.defer { sent = true; writeIntensity(coap, current) }
                 .flatMap { readIntensity(coap) }
                 .map { verified ->
-                    if (verified != current) throw IllegalStateException("Single-pulse verification failed.")
+                    if (verified != current) throw AirCommandFailure.Answered("Single-pulse verification failed.")
                     previous to current
                 }
         }.timeout(8, TimeUnit.SECONDS).subscribe({ (previous, current) ->
@@ -1280,7 +1286,8 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
                 ),
             )
         }, { error ->
-            finishSessionError(coap, "HAPTIC_PULSE_FAILED", error.message ?: "Could not send a haptic pulse.")
+            finishSessionError(coap, AirCommandFailure.code(error, sent, answeredCode = "HAPTIC_PULSE_FAILED"),
+                error.message ?: "Could not send a haptic pulse.")
         }))
     }
 
@@ -1291,10 +1298,11 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
      * is a single change: the Air cannot pulse at one strength and keep another.
      */
     private fun runTap(coap: CoapEndpoint, requested: Int?) {
+        var sent = false
         disposables.add(readIntensity(coap).flatMap { original ->
             val target = requested ?: original
             val body = if (target == original) AirHapticSettings.tap(original) else AirHapticSettings.write(target)
-            postSettings(coap, body)
+            Single.defer { sent = true; postSettings(coap, body) }
                 .flatMap { readIntensity(coap) }
                 .onErrorResumeNext { error: Throwable ->
                     // The message may have been applied even without a reply.
@@ -1303,7 +1311,7 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
                 .flatMap { verified ->
                     if (verified == target) Single.just(original to target)
                     else writeIntensity(coap, original).retry(2).flatMap {
-                        Single.error<Pair<Int, Int>>(IllegalStateException("Tap was not verified; the original strength was restored."))
+                        Single.error<Pair<Int, Int>>(AirCommandFailure.Answered("Tap was not verified; the original strength was restored."))
                     }
                 }
         }.subscribe({ (original, target) ->
@@ -1314,7 +1322,9 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
                 "verified" to true,
             ))
         }, { error ->
-            finishSessionError(coap, "HAPTIC_TAP_FAILED", error.message ?: "Could not send a haptic tap; check vibration strength in Google Health.")
+            // Only an unexpected answer from the Air is HAPTIC_TAP_FAILED; silence is temporary.
+            finishSessionError(coap, AirCommandFailure.code(error, sent, answeredCode = "HAPTIC_TAP_FAILED"),
+                error.message ?: "Could not send a haptic tap; check vibration strength in Google Health.")
         }))
     }
 
@@ -1323,19 +1333,20 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
             .expectSuccess(false).forceNonBlockwise(true).maxResendCount(0)
             .body(body).build()
         return coap.responseFor(request).timeout(3, TimeUnit.SECONDS).map { response ->
-            if (response.responseCode.responseClass.toInt() != 2) throw IllegalStateException("Air rejected haptic setting change.")
+            if (response.responseCode.responseClass.toInt() != 2) throw AirCommandFailure.Answered("Air rejected haptic setting change.")
             true
         }
     }
 
     private fun runBoundedHaptic(coap: CoapEndpoint) {
+        var sent = false
         disposables.add(readIntensity(coap).flatMap { original ->
                 val alternate = if (original == 2) 3 else 2
-                writeIntensity(coap, alternate)
+                Single.defer { sent = true; writeIntensity(coap, alternate) }
                     .flatMap { Single.timer(800, TimeUnit.MILLISECONDS).map { original } }
                     .flatMap { prior -> writeIntensity(coap, prior).retry(2).map { prior } }
                     .flatMap { prior -> readIntensity(coap).map { verified ->
-                        if (verified != prior) throw IllegalStateException("Original haptic setting was not verified restored.")
+                        if (verified != prior) throw AirCommandFailure.Answered("Original haptic setting was not verified restored.")
                         prior
                     } }.onErrorResumeNext { hapticError: Throwable ->
                         // A timed-out write may still have reached the Air. Restore the
@@ -1356,7 +1367,10 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
         // dispose the recovery write; the operation-wide 45s guard remains.
         }.subscribe({ original ->
             finishSessionSuccess(coap, mapOf("originalIntensity" to original, "restored" to true, "verified" to true))
-        }, { error -> finishSessionError(coap, "HAPTIC_FAILED", error.message ?: "Haptic command failed; check Google Health settings." ) }))
+        }, { error ->
+            finishSessionError(coap, AirCommandFailure.code(error, sent, answeredCode = "HAPTIC_FAILED"),
+                error.message ?: "Haptic command failed; check Google Health settings.")
+        }))
     }
 
     private fun writeIntensity(coap: CoapEndpoint, intensity: Int): Single<Boolean> =
@@ -1411,6 +1425,7 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
             return
         }
         val reply = pendingResult ?: return
+        if (usingWarmLink && AirCommandFailure.distrustsLink(code)) warmLinkUnresponsive = true
         handoff?.let { pending ->
             // The link failed or the handoff errored: release now.
             completeHandoff(pending, "link_lost")
@@ -1573,8 +1588,18 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
             closingGatt?.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_LOW_POWER)
         }
         linkBoosted = false
-        val keepWarm = closingGatt != null && closingGatt === warmLink?.gatt
-        if (keepWarm) {
+        val onWarmLink = closingGatt != null && closingGatt === warmLink?.gatt
+        val keepWarm = onWarmLink && !warmLinkUnresponsive
+        if (onWarmLink && warmLinkUnresponsive) {
+            // Connected and subscribed, yet the command got no reply. Reusing it
+            // would fail every following command the same way, and the watchdog
+            // only replaces links that are disconnected. Rebuild it instead.
+            android.util.Log.d("FitbitAir", "warm link unresponsive; replacing")
+            AirTransportDiagnostics.recordLinkRecovery("dropped_no_reply")
+            trace.note("warmLink", "dropped")
+            warmLink?.close()
+            warmLink = null
+        } else if (keepWarm) {
             // The warm link stays connected for the next command.
             warmLink?.delegate = null
             trace.note("warmLink", "kept")
@@ -1583,6 +1608,7 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
             trace.step("gattClose", closingGatt != null) { closingGatt?.close() }
         }
         usingWarmLink = false
+        warmLinkUnresponsive = false
         AirTransportLease.release(transportOwner)
         if (warmLinkWanted && warmLink == null) {
             handler.postDelayed({ if (warmLink == null) rebuildWarmLink("after_fallback") }, 1_000L)

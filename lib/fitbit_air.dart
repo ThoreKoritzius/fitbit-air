@@ -236,8 +236,11 @@ class FitbitAir {
   /// changes, so it cannot pulse at one strength while keeping another.
   ///
   /// The setting is read back afterward and restored if verification fails,
-  /// which throws [FitbitAirException] with `HAPTIC_TAP_FAILED`. Observed on
-  /// one Air firmware; see the research notes.
+  /// which throws [FitbitAirException] with `HAPTIC_TAP_FAILED`: the Air
+  /// answered, but not as expected. When the Air does not answer, the code is
+  /// `AIR_NO_REPLY` if nothing was sent yet (safe to retry) or
+  /// `HAPTIC_UNCONFIRMED` if the pulse may already have happened (do not
+  /// retry). Both are [AirFailureKind.temporary].
   static Future<TapResult> tap({HapticIntensity? intensity}) async =>
       TapResult.fromMap(
         await _invokeMap('tap', {
@@ -591,6 +594,8 @@ enum AirFailureKind {
     'TIMEOUT' ||
     'CANCELLED' ||
     'HANDSHAKE_TIMEOUT' ||
+    'AIR_NO_REPLY' ||
+    'HAPTIC_UNCONFIRMED' ||
     'GATT_CONNECT' ||
     'GATT_DISCONNECTED' ||
     'CHANNEL_CONNECT' ||
