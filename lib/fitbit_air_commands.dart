@@ -19,6 +19,9 @@ enum AirHapticKind {
 
 /// A host-authenticated command with an application-assigned unique ID.
 ///
+/// [id] must be 1–128 characters. Hash longer natural keys first: Android
+/// `StatusBarNotification.key` values, for example, can exceed 128.
+///
 /// Authenticate/authorize the sender before constructing this. The SDK does
 /// not authenticate push payloads, request notification access, or wake an app.
 class AirHapticCommand {
