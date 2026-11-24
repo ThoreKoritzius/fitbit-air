@@ -285,7 +285,8 @@ class FitbitAir {
     }),
   );
 
-  /// Ends a running [ring]. Safe to call when nothing is ringing.
+  /// Ends a running [ring]. Safe to call when nothing is ringing: it then does
+  /// nothing, and does not affect a later ring.
   static Future<void> stopRing() async {
     try {
       await _channel.invokeMethod<void>('stopRing');
