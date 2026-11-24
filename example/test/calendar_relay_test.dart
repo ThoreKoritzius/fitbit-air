@@ -28,6 +28,7 @@ void main() {
   var deferStop = false;
   var nameCandidate = false;
   var pulseStyle = 'single';
+  bool? batteryUnrestricted;
   Map<Object?, Object?>? lastSelection;
   Object? lastTapArguments;
   late List<Map<String, Object?>> history;
@@ -61,6 +62,7 @@ void main() {
     deferStop = false;
     nameCandidate = false;
     pulseStyle = 'single';
+    batteryUnrestricted = null;
     rules = {
       'defaultPreset': 'single',
       'apps': <String, Object?>{},
@@ -103,6 +105,7 @@ void main() {
                 'bluetoothPermission': true,
                 'history': history,
                 'conversations': conversations,
+                'batteryUnrestricted': batteryUnrestricted,
               };
             case 'saveSetupStep':
               setupStep = (call.arguments as Map)['step'] as int;
@@ -247,6 +250,7 @@ void main() {
               if (!deferStop) running = false;
               return null;
             case 'settings':
+            case 'appSettings':
             case 'openRepository':
             case 'bluetoothSettings':
             case 'clearHistory':
@@ -1276,6 +1280,26 @@ void main() {
     expect(find.text('1 rule'), findsOneWidget);
     expect(running, isTrue);
     expect(calls, isNot(contains('stop')));
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('a battery-optimized relay suggests running in the background', (
+    tester,
+  ) async {
+    access = true;
+    batteryUnrestricted = false;
+    await mount(tester);
+    // Only relevant while notifications are on.
+    expect(find.byKey(const ValueKey('battery-restricted')), findsNothing);
+    running = true;
+    await controller.refresh();
+    await tester.pumpAndSettle();
+    await tap(tester, 'battery-settings');
+    expect(calls, contains('appSettings'));
+    batteryUnrestricted = true;
+    await controller.refresh();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('battery-restricted')), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 
