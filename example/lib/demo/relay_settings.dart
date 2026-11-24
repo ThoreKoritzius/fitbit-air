@@ -105,7 +105,8 @@ class RelaySettings {
     this.silenceReason,
     this.callAlertsSupported = false,
     this.callAlertsEnabled = false,
-    this.callPreset = VibrationPreset.doublePulse,
+    this.callPreset = VibrationPreset.single,
+    this.callRing = true,
     this.toneEnabled = false,
     this.toneUrgent,
     this.toneNegative,
@@ -128,6 +129,9 @@ class RelaySettings {
   final bool callAlertsSupported;
   final bool callAlertsEnabled;
   final VibrationPreset callPreset;
+
+  /// Ring until the call stops ringing (default); otherwise [callPreset] once.
+  final bool callRing;
 
   /// Message tone presets; null keeps the app or chat vibration.
   final bool toneEnabled;
@@ -174,7 +178,8 @@ class RelaySettings {
       silenceReason: map['silenceReason'] as String?,
       callAlertsSupported: map['callAlertsSupported'] == true,
       callAlertsEnabled: map['callAlertsEnabled'] == true,
-      callPreset: optional(map['callPreset']) ?? VibrationPreset.doublePulse,
+      callPreset: optional(map['callPreset']) ?? VibrationPreset.single,
+      callRing: map['callRing'] != false,
       toneEnabled: map['toneEnabled'] == true,
       toneUrgent: optional(map['toneUrgent']),
       toneNegative: optional(map['toneNegative']),

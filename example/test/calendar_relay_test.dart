@@ -219,6 +219,11 @@ void main() {
             case 'saveKeywordRules':
               rules['keywordRules'] = (call.arguments as Map)['rules'];
               return null;
+            case 'saveCallPreset':
+              final args = call.arguments as Map;
+              rules['callPreset'] = args['preset'];
+              rules['callRing'] = args['ring'];
+              return null;
             case 'saveQuietHours':
               final args = call.arguments as Map;
               rules.addAll({
@@ -1314,6 +1319,27 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+
+  testWidgets('calls ring by default and can buzz once instead', (
+    tester,
+  ) async {
+    access = true;
+    rules.addAll({'callAlertsSupported': true, 'callAlertsEnabled': true});
+    await mount(tester);
+    await tap(tester, 'nav-rules');
+    // Older settings without a mode ring.
+    expect(find.text('Rings until you answer'), findsOneWidget);
+    await tap(tester, 'call-vibration');
+    await tap(tester, 'call-mode-double');
+    expect(rules['callPreset'], 'double');
+    expect(rules['callRing'], isFalse);
+    expect(find.text('Two pulses · Once per call'), findsOneWidget);
+    await tap(tester, 'call-vibration');
+    await tap(tester, 'call-mode-ring');
+    expect(rules['callRing'], isTrue);
+    expect(find.text('Rings until you answer'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets('Home tab carries a dot only when something needs attention', (
     tester,

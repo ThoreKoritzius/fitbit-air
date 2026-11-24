@@ -175,7 +175,8 @@ class MainActivity : FlutterActivity() {
                         }
                         "saveCallPreset" -> {
                             val preset = RelayPreset.parse(requireNotNull(call.argument<String>("preset")))
-                            RelayRuleStore.update(this) { it.copy(calls = it.calls.copy(preset = preset)) }
+                            val ring = call.argument<Boolean>("ring") ?: false
+                            RelayRuleStore.update(this) { it.copy(calls = it.calls.copy(preset = preset, ring = ring)) }
                             result.success(null)
                         }
                         "saveToneRules" -> {

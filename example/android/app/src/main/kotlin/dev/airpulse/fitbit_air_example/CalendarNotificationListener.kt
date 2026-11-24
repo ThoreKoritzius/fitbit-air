@@ -39,10 +39,22 @@ class CalendarNotificationListener : NotificationListenerService() {
         val relay = CalendarRelayService.active
         val callType = callType(sbn.notification)
         if (callType == Notification.CallStyle.CALL_TYPE_INCOMING) {
+            // Package only: never the caller. Lets a test call show whether it was recognized.
+            android.util.Log.i("AirRelay", "incoming call from ${sbn.packageName}; relay ${if (relay == null) "off" else "on"}")
             relay?.onIncomingCall(sbn.packageName, sbn.key, sbn.postTime)
             return
         }
-        relay?.onCallEnded(sbn.key)
+        if (sbn.notification.category == Notification.CATEGORY_CALL || sbn.notification.fullScreenIntent != null) {
+            // Shape only, never the caller: which call-like notifications are not recognized as ringing.
+            val n = sbn.notification
+            android.util.Log.i("AirRelay", "call-like notification from ${sbn.packageName}: category=${n.category} type=$callType " +
+                "declared=${n.extras.getInt(Notification.EXTRA_CALL_TYPE)} fullScreen=${n.fullScreenIntent != null} " +
+                "ongoing=${n.flags and Notification.FLAG_ONGOING_EVENT != 0} " +
+                "style=${n.extras.getString(Notification.EXTRA_TEMPLATE)?.substringAfterLast('$')}")
+        }
+        // A call notification that is no longer ringing means the call was answered or ended.
+        // Other notifications never end a call.
+        if (sbn.notification.category == Notification.CATEGORY_CALL) relay?.onCallEnded(sbn.key, "no longer ringing")
         if (callType == Notification.CallStyle.CALL_TYPE_ONGOING ||
             callType == Notification.CallStyle.CALL_TYPE_SCREENING) return
         runCatching { RelayConversations.observe(sbn.packageName, sbn.notification, sbn.isOngoing, appLabel(sbn.packageName)) }
@@ -81,7 +93,7 @@ class CalendarNotificationListener : NotificationListenerService() {
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
-        CalendarRelayService.active?.onAlertRemoved(sbn.key)
+        CalendarRelayService.active?.onAlertRemoved(sbn.key, call = sbn.notification.category == Notification.CATEGORY_CALL)
     }
 
     companion object {
@@ -130,9 +142,13 @@ class CalendarNotificationListener : NotificationListenerService() {
             .map { it.key }
 
         private fun callType(notification: Notification): Int {
-            if (Build.VERSION.SDK_INT < 34 || notification.category != Notification.CATEGORY_CALL ||
-                notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return 0
-            return runCatching { notification.extras.getInt(Notification.EXTRA_CALL_TYPE) }.getOrDefault(0)
+            if (Build.VERSION.SDK_INT < 34) return 0
+            return RelayCallPolicy.callType(
+                isCall = notification.category == Notification.CATEGORY_CALL,
+                summary = notification.flags and Notification.FLAG_GROUP_SUMMARY != 0,
+                declaredType = runCatching { notification.extras.getInt(Notification.EXTRA_CALL_TYPE) }.getOrDefault(0),
+                fullScreen = notification.fullScreenIntent != null,
+            )
         }
 
         var connected = false

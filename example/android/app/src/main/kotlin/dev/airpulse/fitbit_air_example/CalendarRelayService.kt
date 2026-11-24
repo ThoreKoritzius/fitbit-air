@@ -31,6 +31,10 @@ class CalendarRelayService : Service() {
     private var channel: MethodChannel? = null
     private var filter: CalendarAlertFilter? = null
     private val ringingCalls = RelayRingingCalls()
+    /** The call the Air is ringing for, while its ring runs. */
+    private var activeRing: RelayRingingCalls.Ring? = null
+    /** Removed call notifications that end their call unless re-posted first. */
+    private val pendingCallEnds = mutableMapOf<String, Runnable>()
     private var wakeLock: PowerManager.WakeLock? = null
     private var pending = 0
     private var ready = false
@@ -243,6 +247,15 @@ class CalendarRelayService : Service() {
     private fun phoneAwake(silence: RelaySilence): Boolean =
         silence.onlyWhileAsleep && getSystemService(PowerManager::class.java).isInteractive
 
+    /** The default phone app, or a system app such as Samsung's in-call screen. */
+    private fun isPhoneApp(packageName: String): Boolean {
+        val dialer = runCatching { getSystemService(android.telecom.TelecomManager::class.java).defaultDialerPackage }.getOrNull()
+        if (packageName == dialer) return true
+        return runCatching {
+            packageManager.getApplicationInfo(packageName, 0).flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM != 0
+        }.getOrDefault(false)
+    }
+
     internal fun onAlert(packageName: String, key: String, postedAt: Long, ongoing: Boolean, summary: Boolean, messageTimestamp: Long?, conversationIds: Set<String>, tone: RelayTone? = null, keyword: RelayKeywordRule? = null) {
         if (!ready || stopping) return
         val now = System.currentTimeMillis()
@@ -264,13 +277,21 @@ class CalendarRelayService : Service() {
 
     internal fun onIncomingCall(packageName: String, key: String, postedAt: Long) {
         if (!ready || stopping) return
+        // Re-posted while ringing (the Phone app does this): the same call goes on.
+        pendingCallEnds.remove(key)?.let(handler::removeCallbacks)
         val ring = ringingCalls.onIncoming(key) ?: return
         val now = System.currentTimeMillis()
-        if (!acceptsPackage(packageName) || postedAt > now || now - postedAt >= 30_000) return
+        if (postedAt > now || now - postedAt >= 30_000) return
         val config = RelayRuleStore.read(this)
         val match = config.calls.match() ?: return
+        if (!RelayCallPolicy.accepts(packageName, selectedPackages, isPhoneApp(packageName))) {
+            android.util.Log.i("AirRelay", "call from $packageName ignored: app not selected")
+            record(nextId(), packageName, postedAt, "filtered")
+            return
+        }
+        // "Only when the screen is off" does not apply: a ringing call turns the screen on
+        // and covers the lock screen, so the phone always looks in use. Quiet hours and pause do.
         val silence = config.silence.reason(now)
-            ?: "phone_awake".takeIf { phoneAwake(config.silence) }
         if (silence != null) {
             record(nextId(), packageName, postedAt, silence, match = match)
             return
@@ -278,13 +299,30 @@ class CalendarRelayService : Service() {
         submit(packageName, postedAt, match, ringingCall = ring)
     }
 
-    internal fun onCallEnded(key: String) {
+    internal fun onCallEnded(key: String, reason: String) {
+        pendingCallEnds.remove(key)?.let(handler::removeCallbacks)
         ringingCalls.onEnded(key)
+        // Answered, declined or missed: stop ringing on the wrist right away.
+        if (activeRing?.key == key) {
+            android.util.Log.i("AirRelay", "ring stopped: call $reason")
+            channel?.invokeMethod("stopRing", null)
+        }
     }
 
-    internal fun onAlertRemoved(key: String) {
+    /**
+     * Google's Phone app removes and re-posts its notification while the call is
+     * still ringing, so a removal only ends the call if it is not re-posted soon.
+     */
+    private fun onCallRemoved(key: String) {
+        if (key in pendingCallEnds) return
+        val end = Runnable { pendingCallEnds.remove(key); onCallEnded(key, "notification removed") }
+        pendingCallEnds[key] = end
+        handler.postDelayed(end, CALL_REMOVAL_GRACE_MS)
+    }
+
+    internal fun onAlertRemoved(key: String, call: Boolean) {
         filter?.onRemoved(key)
-        onCallEnded(key)
+        if (call) onCallRemoved(key)
     }
 
     internal fun testPulse(preset: String? = null, completion: ((RelayWorkerResult) -> Unit)? = null) {
@@ -346,7 +384,8 @@ class CalendarRelayService : Service() {
         val fresh = members.filter { (id, source, choice) ->
             val stage = when {
                 now < source.second || now - source.second >= 30_000 -> "expired"
-                awake && source.first != null -> "phone_awake"
+                // A ringing call turns the screen on itself; the screen-off rule is for notifications.
+                awake && source.first != null && choice.ringingCall == null -> "phone_awake"
                 choice.ringingCall != null -> callSkipReason(config, source.first, choice.ringingCall)
                 else -> null
             }
@@ -390,7 +429,8 @@ class CalendarRelayService : Service() {
     private fun callSkipReason(config: RelayRuleConfig, packageName: String?, ring: RelayRingingCalls.Ring): String? =
         when {
             !ringingCalls.isRinging(ring) -> "call_ended"
-            !config.calls.enabled || packageName !in config.selectedPackages -> "filtered"
+            !config.calls.enabled || packageName == null ||
+                !RelayCallPolicy.accepts(packageName, config.selectedPackages, isPhoneApp(packageName)) -> "filtered"
             else -> null
         }
 
@@ -414,10 +454,22 @@ class CalendarRelayService : Service() {
         val config = RelayRuleStore.read(this)
         val settings = config.silence
         val silence = settings.reason(System.currentTimeMillis())
-            ?: "phone_awake".takeIf { sbnPackage != null && phoneAwake(settings) }
+            ?: "phone_awake".takeIf { sbnPackage != null && ringingCall == null && phoneAwake(settings) }
         val skip = silence ?: ringingCall?.let { callSkipReason(config, sbnPackage, it) }
         if (skip != null || System.currentTimeMillis() >= expiresAt) {
             finished(RelayWorkerResult(skip ?: "expired", null)); return
+        }
+        if (ringingCall != null && config.calls.ring) {
+            // Ring along with the phone until the call stops ringing.
+            activeRing = ringingCall
+            channel?.invokeMethod("ring", mapOf(
+                "intensity" to null, "gapMillis" to RING_GAP_MS, "maxMillis" to RING_MAX_MS,
+            ), object : MethodChannel.Result {
+                override fun success(result: Any?) { activeRing = null; finished(RelayWorkerResult.decode(result)) }
+                override fun error(code: String, message: String?, details: Any?) { activeRing = null; finished(RelayWorkerResult("failed", "WORKER_ERROR")) }
+                override fun notImplemented() { activeRing = null; finished(RelayWorkerResult("failed", "WORKER_UNAVAILABLE")) }
+            })
+            return
         }
         channel?.invokeMethod("dispatch", mapOf(
             "id" to id, "expiresAt" to expiresAt,
@@ -514,6 +566,12 @@ class CalendarRelayService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
+        /** About one pulse a second, as measured in the held-session ring PR. */
+        private const val RING_GAP_MS = 800
+        /** Phones ring for about 30–60 s; the ring also stops as soon as the call does. */
+        private const val RING_MAX_MS = 45_000
+        /** How long a removed call notification may take to come back while ringing. */
+        private const val CALL_REMOVAL_GRACE_MS = 1_500L
         private var starting = false
         private var cancelStart = false
         val isRunning: Boolean get() = active != null || starting
