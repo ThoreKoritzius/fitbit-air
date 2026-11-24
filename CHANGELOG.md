@@ -1,6 +1,18 @@
 ## 0.3.0
 
-Air Relay only; the `fitbit_air` package is unchanged since 0.2.2.
+### Package
+
+- An Air that does not answer is no longer reported as a compatibility
+  failure. Haptic commands now distinguish `AIR_NO_REPLY` (the read before any
+  change went unanswered, so nothing was sent) and `HAPTIC_UNCONFIRMED` (a
+  change was sent but not confirmed, so it may have pulsed) from the existing
+  codes, which now mean the Air answered unexpectedly. Both new codes are
+  `AirFailureKind.temporary`.
+- `AirHapticDispatcher` also retries `AIR_NO_REPLY` once after 3 s, like
+  `HANDSHAKE_TIMEOUT`. `HAPTIC_UNCONFIRMED` is never retried.
+- A warm link that stays connected but stops carrying replies is replaced
+  after the first command on it fails, instead of being reused for every
+  following command. `readLinkHealth()` counts this as `dropped_no_reply`.
 
 ### Example app
 
@@ -27,6 +39,11 @@ Air Relay only; the `fitbit_air` package is unchanged since 0.2.2.
   allow notifications, choose apps) with suggested apps first, an optional
   test buzz, and a button that starts notifications right away.
 - New About page with compatibility, help links and open-source licenses.
+- Clearer errors when the Air doesn't answer ("didn't answer in time"
+  instead of "answered in an unexpected way"), with one automatic retry when
+  nothing was sent.
+- Home suggests letting Air Relay run in the background when Android may
+  pause it to save battery, which can delay buzzes on some phones.
 - The Google Play build leaves out Developer tools.
 
 ## 0.2.2

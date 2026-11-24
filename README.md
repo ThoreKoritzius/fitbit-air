@@ -63,7 +63,7 @@ Or add it to `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  fitbit_air: ^0.2.2
+  fitbit_air: ^0.3.0
 ```
 
 To try unreleased changes, depend on the Git repository instead:
@@ -219,6 +219,8 @@ try {
     case 'BLUETOOTH_PERMISSION': // Nearby devices permission denied.
     case 'BUSY': // Another command is still running.
     case 'HANDSHAKE_TIMEOUT': // Google Health held the Air; try again shortly.
+    case 'AIR_NO_REPLY': // The Air didn't answer; nothing was sent.
+    case 'HAPTIC_UNCONFIRMED': // No reply after sending; it may have pulsed.
     default:
       print(error.message);
   }
@@ -228,7 +230,8 @@ try {
 `error.kind` groups codes by what the user can do: `temporary` (retry
 later), `setup` (fix Bluetooth, a permission or pairing), `compatibility`
 (the Air answered unexpectedly, for example after a firmware update) or
-`unknown`. A single compatibility error can still be a glitch; when it
+`unknown`. An Air that does not answer at all is `temporary`, never
+`compatibility`. A single compatibility error can still be a glitch; when it
 repeats, suggest checking for an app update.
 
 ### Prepare for firmware updates
@@ -253,9 +256,10 @@ its own transport and loads no code from it.
 For alerts from push messages or other apps, queue commands through
 `AirHapticDispatcher` from `package:fitbit_air/fitbit_air_commands.dart`. It
 serializes commands and drops duplicates and expired ones. It retries only a
-failure that guarantees nothing reached the Air (`HANDSHAKE_TIMEOUT`: the
-secure session never started), once, after 3 s; a lost or ambiguous result
-is never retried. Use `AirHapticCommand.fromEventKey` to derive a stable ID from
+failure that guarantees nothing reached the Air, once, after 3 s:
+`HANDSHAKE_TIMEOUT` (the secure session never started) or `AIR_NO_REPLY` (the
+read before any change went unanswered). A lost or ambiguous result, such as
+`HAPTIC_UNCONFIRMED`, is never retried. Use `AirHapticCommand.fromEventKey` to derive a stable ID from
 your source and message ID, even when the message ID exceeds 128 characters.
 
 ```dart
