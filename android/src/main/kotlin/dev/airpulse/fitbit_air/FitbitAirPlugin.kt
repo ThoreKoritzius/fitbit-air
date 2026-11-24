@@ -359,7 +359,9 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
                     AirTransportLease.release(transportOwner)
                 }
                 if (activeOperation is Operation.Ring) {
-                    result.error("CANNOT_CANCEL_RING", "Use stopRing to end a ring.", null)
+                    // Cancelling a ring is stopping it; it then restores and finishes normally.
+                    ringStopRequested = true
+                    result.success(null)
                     return
                 }
                 if (activeOperation == Operation.PreviewHaptic ||
@@ -1382,19 +1384,22 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
      * pulse merges them into fewer, longer buzzes; [MIN_RING_GAP_MS] is a floor,
      * not a guarantee that every gap above it is felt as a separate pulse.
      *
-     * A dropped pulse never ends the ring: the wearer would rather feel the
-     * next one than have the call go quiet. Only [stopRing], the duration, or
-     * a lost link ends it, and the wearer's original strength is restored.
+     * A dropped pulse does not end the ring: the wearer would rather feel the
+     * next one than have the call go quiet. [MAX_RING_DROPS_IN_A_ROW] dropped
+     * in a row do, as the session is then gone. [stopRing], the duration and
+     * a lost link end it too. The wearer's strength is restored on every path
+     * that still has a link; a link lost mid-ring can leave `target` in place.
      */
     private fun runRing(coap: CoapEndpoint, operation: Operation.Ring) {
         val until = SystemClock.elapsedRealtime() + operation.maxMillis
         var sent = 0
+        var pulses = 0
+        var dropsInARow = 0
         fun ringing() = !ringStopRequested && SystemClock.elapsedRealtime() < until &&
             (operation.pulses == null || sent < operation.pulses)
         disposables.add(readIntensity(coap).flatMap { original ->
             val target = operation.intensity ?: original
             val body = AirHapticSettings.tap(target)
-            var pulses = 0
             fun pulse(): Single<Int> = Single.defer {
                 // Checked here, not only after the gap: a stop that lands while
                 // a pulse is being prepared must not still buzz the wrist after
@@ -1404,11 +1409,14 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
                 val sentAt = SystemClock.elapsedRealtime()
                 postSettings(coap, body).map {
                     pulses++
-                    Log.i("AirBridge", "pulse ${pulses} rtt=${SystemClock.elapsedRealtime() - sentAt}ms")
+                    dropsInARow = 0
+                    Log.d("FitbitAir", "ring pulse $pulses rtt=${SystemClock.elapsedRealtime() - sentAt}ms")
                     pulses
                 }.onErrorResumeNext { error: Throwable ->
-                    Log.w("AirBridge", "pulse dropped after ${SystemClock.elapsedRealtime() - sentAt}ms: ${error.message}")
-                    Single.just(pulses)
+                    Log.w("FitbitAir", "ring pulse dropped after ${SystemClock.elapsedRealtime() - sentAt}ms: ${error.message}")
+                    // One dropped pulse is skipped. Several in a row mean the session is
+                    // gone; ringing on would hold the channel from Google Health for nothing.
+                    if (++dropsInARow >= MAX_RING_DROPS_IN_A_ROW) Single.error(error) else Single.just(pulses)
                 }
             }
                 .flatMap { count ->
@@ -1416,19 +1424,23 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
                     else Single.timer(operation.gapMillis, TimeUnit.MILLISECONDS)
                         .flatMap { if (ringing()) pulse() else Single.just(pulses) }
                 }
-            pulse().flatMap { count ->
-                // The last pulse left `target` behind; put the wearer's own
-                // strength back so the next notification feels as they set it.
-                if (target == original) Single.just(count to true)
+            // The last pulse left `target` behind; put the wearer's own strength
+            // back so the next notification feels as they set it.
+            val restore: Single<Boolean> = if (target == original) Single.just(true)
                 else writeIntensity(coap, original).retry(2)
                     .flatMap { readIntensity(coap) }
-                    .map { count to (it == original) }
-                    .onErrorReturnItem(count to false)
-            }
+                    .map { it == original }
+                    .onErrorReturnItem(false)
+            pulse().flatMap { count -> restore.map { count to it } }
+                // Ended by failure: still try to restore before reporting it.
+                .onErrorResumeNext { error: Throwable -> restore.flatMap { Single.error<Pair<Int, Boolean>>(error) } }
         }.subscribe({ (pulses, restored) ->
             finishSessionSuccess(coap, mapOf("pulses" to pulses, "restored" to restored))
         }, { error ->
-            finishSessionError(coap, "RING_FAILED", error.message ?: "Could not ring the Air.")
+            // Silence from the Air is temporary (AIR_NO_REPLY before any pulse, else
+            // HAPTIC_UNCONFIRMED); only an unexpected answer is RING_FAILED.
+            finishSessionError(coap, AirCommandFailure.code(error, sent > 0, answeredCode = "RING_FAILED"),
+                error.message ?: "Could not ring the Air.")
         }))
     }
 
@@ -1767,6 +1779,8 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
         private const val OPERATION_TIMEOUT_MS = 45_000L
         /** Below this, pulses merge into one longer buzz rather than repeating. */
         internal const val MIN_RING_GAP_MS = 250L
+        /** Dropped pulses in a row after which the session counts as gone. */
+        private const val MAX_RING_DROPS_IN_A_ROW = 3
         private const val HANDOFF_TIMEOUT_MS = 10_000L
         private const val HANDSHAKE_RETRY_MS = 6_000L
         /** A working link delivers the Air's Gattlink answer within about a second. */

@@ -265,6 +265,12 @@ class FitbitAir {
   ///
   /// Returns how many pulses were posted and whether the original strength was
   /// verified restored. A posted pulse is not a promise one was felt.
+  ///
+  /// A single unanswered pulse is skipped; three in a row end the ring with
+  /// `HAPTIC_UNCONFIRMED` (or `AIR_NO_REPLY` before any pulse). If the link is
+  /// lost mid-ring with an explicit [intensity] that differs from the
+  /// wearer's, that strength can remain; without [intensity] it never
+  /// changes. [cancelOperation] stops a ring like [stopRing].
   static Future<AirRingResult> ring({
     HapticIntensity? intensity,
     Duration gap = const Duration(milliseconds: 700),
@@ -589,7 +595,6 @@ class AirBattery {
   );
 }
 
-/// Result of a direct haptic test.
 /// The outcome of a [FitbitAir.ring].
 class AirRingResult {
   const AirRingResult({required this.pulses, required this.restored});
@@ -607,6 +612,7 @@ class AirRingResult {
   );
 }
 
+/// Result of a direct haptic test.
 class VibrationResult {
   const VibrationResult({
     required this.originalIntensity,
@@ -677,6 +683,7 @@ enum AirFailureKind {
     'HAPTIC_READ_FAILED' ||
     'HAPTIC_WRITE_FAILED' ||
     'HAPTIC_TAP_FAILED' ||
+    'RING_FAILED' ||
     'HAPTIC_PULSE_FAILED' ||
     'HAPTIC_FAILED' ||
     'BATTERY_READ_FAILED' ||

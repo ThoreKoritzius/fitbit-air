@@ -65,11 +65,7 @@ void main() {
       gap: const Duration(milliseconds: 650),
       maximum: const Duration(seconds: 45),
     );
-    expect(arguments, {
-      'intensity': 3,
-      'gapMillis': 650,
-      'maxMillis': 45000,
-    });
+    expect(arguments, {'intensity': 3, 'gapMillis': 650, 'maxMillis': 45000});
     expect(result.pulses, 6);
     expect(result.restored, isTrue);
   });
@@ -211,6 +207,7 @@ void main() {
       AirFailureKind.of('HAPTIC_TAP_FAILED'),
       AirFailureKind.compatibility,
     );
+    expect(AirFailureKind.of('RING_FAILED'), AirFailureKind.compatibility);
     expect(AirFailureKind.of('AIR_NOT_FOUND'), AirFailureKind.setup);
     expect(
       const FitbitAirException('NATIVE_UNAVAILABLE', '').kind,
