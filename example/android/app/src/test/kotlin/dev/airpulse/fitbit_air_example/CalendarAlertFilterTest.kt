@@ -31,6 +31,13 @@ class CalendarAlertFilterTest {
         assertTrue(filter.accept(calendar, "different-key", 2_000, 2_010, false, false))
     }
 
+    @Test fun alertOnceUpdatesNeverBuzzEvenWithANewerMessage() {
+        val filter = CalendarAlertFilter(1_000)
+        assertTrue(filter.accept(calendar, "chat", 1_001, 1_010, false, false, 1_001, alertOnce = true))
+        assertFalse(filter.accept(calendar, "chat", 2_000, 2_010, false, false, 2_000, alertOnce = true))
+        assertTrue(filter.accept(calendar, "chat", 3_000, 3_010, false, false, 3_000))
+    }
+
     @Test fun newAlertsStillWorkAfter256KeysWithoutReplayingActiveAlerts() {
         val filter = CalendarAlertFilter(1_000)
         repeat(512) { assertTrue(filter.accept(calendar, "key-$it", 1_001, 1_010, false, false)) }

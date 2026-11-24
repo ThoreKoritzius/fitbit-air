@@ -14,10 +14,13 @@ internal class CalendarAlertFilter(
     }
 
     fun accept(packageName: String, key: String, postedAt: Long, now: Long,
-               ongoing: Boolean, summary: Boolean, messageTimestamp: Long? = null): Boolean {
+               ongoing: Boolean, summary: Boolean, messageTimestamp: Long? = null,
+               alertOnce: Boolean = false): Boolean {
         if (packageName !in selectedPackages || ongoing || summary ||
             postedAt < startedAt || postedAt > now || now - postedAt >= 30_000) return false
         if (seen.containsKey(key)) {
+            // FLAG_ONLY_ALERT_ONCE: Android never alerts for an update of a shown notification.
+            if (alertOnce) return false
             // Messaging apps reuse chat IDs. Only a strictly newer message can buzz again.
             val previous = seen[key]
             if (messageTimestamp == null || messageTimestamp <= (previous ?: (startedAt - 1))) return false

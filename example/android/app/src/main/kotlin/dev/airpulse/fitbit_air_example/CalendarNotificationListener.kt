@@ -61,23 +61,32 @@ class CalendarNotificationListener : NotificationListenerService() {
             .onFailure { RelayConversations.captureError() }
         if (relay == null) return
         if (!relay.acceptsPackage(sbn.packageName)) return
+        val ranking = runCatching {
+            NotificationListenerService.Ranking().takeIf { currentRanking?.getRanking(sbn.key, it) == true }
+        }.getOrNull()
+        val n = sbn.notification
+        val summary = n.flags and Notification.FLAG_GROUP_SUMMARY != 0
+        val silent = RelaySilentPolicy.silent(
+            importance = ranking?.importance ?: android.app.NotificationManager.IMPORTANCE_UNSPECIFIED,
+            groupChild = n.group != null && !summary,
+            groupAlertBehavior = if (Build.VERSION.SDK_INT >= 26) n.groupAlertBehavior else Notification.GROUP_ALERT_ALL,
+        )
         // Opt-in: the text stays local to this call; only the tone and matched rule reach the relay.
+        // A silent notification never buzzes, so its text is not read at all.
         val keywordRules = relay.keywordRules
-        val text = if (!relay.toneEnabled && keywordRules.isEmpty()) null
+        val text = if (silent || (!relay.toneEnabled && keywordRules.isEmpty())) null
             else runCatching { latestMessageText(sbn.notification)?.toString() }.getOrNull()
         val keyword = runCatching { RelayKeywordMatcher.firstMatch(keywordRules, text)?.let(keywordRules::get) }.getOrNull()
-        val tone = if (!relay.toneEnabled) null else runCatching {
-            val ranking = NotificationListenerService.Ranking()
-                .takeIf { currentRanking?.getRanking(sbn.key, it) == true }
+        val tone = if (silent || !relay.toneEnabled) null else runCatching {
             RelayToneClassifier.classify(text,
                 RelayNotificationSignals.from(sbn.notification, ranking, System.currentTimeMillis()),
                 RelayToneLexicons.shared(this))
         }.getOrNull()
         relay.onAlert(
-            sbn.packageName, sbn.key, sbn.postTime, sbn.isOngoing,
-            sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0,
+            sbn.packageName, sbn.key, sbn.postTime, sbn.isOngoing, summary,
             latestMessageTimestamp(sbn.notification),
-            RelayConversations.identities(sbn.packageName, sbn.notification, appLabel(sbn.packageName)), tone, keyword
+            RelayConversations.identities(sbn.packageName, sbn.notification, appLabel(sbn.packageName)), tone, keyword,
+            silent = silent, alertOnce = n.flags and Notification.FLAG_ONLY_ALERT_ONCE != 0,
         )
     }
 
