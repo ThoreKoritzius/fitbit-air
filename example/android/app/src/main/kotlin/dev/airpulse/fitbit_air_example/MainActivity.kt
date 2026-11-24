@@ -92,7 +92,8 @@ class MainActivity : FlutterActivity() {
                         }
                         "saveSetupStep" -> {
                             val step = requireNotNull(call.argument<Int>("step"))
-                            require(step in 0..3)
+                            // Welcome, Air, notifications, apps, ready.
+                            require(step in 0..4)
                             getSharedPreferences("relay_onboarding", MODE_PRIVATE).edit().putInt("step", step).apply()
                             result.success(null)
                         }

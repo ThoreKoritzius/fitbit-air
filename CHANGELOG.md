@@ -23,6 +23,9 @@ Air Relay only; the `fitbit_air` package is unchanged since 0.2.2.
   update or Android ending the app.
 - Select or deselect all apps at once, and sort selected apps first.
 - Fix relaying stopping after 256 different notification keys.
+- **Simpler setup:** a short welcome, then three steps (connect your Air,
+  allow notifications, choose apps) with suggested apps first, an optional
+  test buzz, and a button that starts notifications right away.
 - New About page with compatibility, help links and open-source licenses.
 - The Google Play build leaves out Developer tools.
 

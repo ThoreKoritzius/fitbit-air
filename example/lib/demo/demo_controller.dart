@@ -590,7 +590,7 @@ class DemoController extends ChangeNotifier {
       final state = await channel.invokeMapMethod<String, Object?>('status');
       if (state == null || _disposed) return;
       setupCompleted = state['setupCompleted'] == true;
-      setupStep = (state['setupStep'] as int? ?? 0).clamp(0, 3);
+      setupStep = (state['setupStep'] as int? ?? 0).clamp(0, 4);
       relayRunning = state['running'] == true;
       relayReady = state['ready'] == true;
       relayStopping = state['stopping'] == true;
@@ -897,7 +897,7 @@ class DemoController extends ChangeNotifier {
       selectedInstalledAppCount > 0;
 
   Future<void> rememberSetupStep(int value) async {
-    setupStep = value.clamp(0, 3);
+    setupStep = value.clamp(0, 4);
     try {
       await channel.invokeMethod<void>('saveSetupStep', {'step': setupStep});
     } on PlatformException {
