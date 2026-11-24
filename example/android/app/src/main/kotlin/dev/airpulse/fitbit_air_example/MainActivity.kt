@@ -73,6 +73,14 @@ class MainActivity : FlutterActivity() {
                             startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:$packageName")))
                             result.success(null)
                         }
+                        "batterySettings" -> {
+                            // The app's own battery page where the phone supports it, else App info.
+                            val uri = android.net.Uri.parse("package:$packageName")
+                            val battery = Intent("android.settings.VIEW_ADVANCED_POWER_USAGE_DETAIL", uri)
+                            startActivity(if (battery.resolveActivity(packageManager) != null) battery
+                                else Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, uri))
+                            result.success(null)
+                        }
                         "allowNotificationControls" -> {
                             if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                                 requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 902)

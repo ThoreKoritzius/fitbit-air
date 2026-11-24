@@ -42,8 +42,10 @@
 - Clearer errors when the Air doesn't answer ("didn't answer in time"
   instead of "answered in an unexpected way"), with one automatic retry when
   nothing was sent.
-- Home suggests letting Air Relay run in the background when Android may
-  pause it to save battery, which can delay buzzes on some phones.
+- On phones whose battery management pauses optimized apps (OPPO, Xiaomi,
+  vivo, Huawei and others), Home suggests allowing Air Relay background use
+  without restrictions and opens its battery settings. Stock Android phones,
+  where the relay keeps running, see no suggestion.
 - The Google Play build leaves out Developer tools.
 
 ## 0.2.2

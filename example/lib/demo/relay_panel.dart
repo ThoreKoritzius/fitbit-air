@@ -378,18 +378,18 @@ class RelayPanel extends StatelessWidget {
               child: const Text('Allow'),
             ),
           ),
-        if (state.batteryUnrestricted == false && state.relayRunning)
+        if (state.suggestUnrestrictedBattery)
           ListTile(
             key: const ValueKey('battery-restricted'),
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.battery_alert_outlined),
             title: const Text('Let Air Relay run in the background'),
             subtitle: const Text(
-              'Your phone may pause it to save battery, which delays buzzes. In App info, set Battery to Unrestricted.',
+              'This phone can pause apps to save battery, which delays buzzes. Allow Air Relay background use without restrictions.',
             ),
             trailing: TextButton(
               key: const ValueKey('battery-settings'),
-              onPressed: () => perform(state.openAppSettings),
+              onPressed: () => perform(state.openBatterySettings),
               child: const Text('Open'),
             ),
           ),

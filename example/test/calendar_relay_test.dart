@@ -29,6 +29,7 @@ void main() {
   var nameCandidate = false;
   var pulseStyle = 'single';
   bool? batteryUnrestricted;
+  var pausesOptimizedApps = false;
   Map<Object?, Object?>? lastSelection;
   Object? lastTapArguments;
   late List<Map<String, Object?>> history;
@@ -63,6 +64,7 @@ void main() {
     nameCandidate = false;
     pulseStyle = 'single';
     batteryUnrestricted = null;
+    pausesOptimizedApps = false;
     rules = {
       'defaultPreset': 'single',
       'apps': <String, Object?>{},
@@ -106,6 +108,7 @@ void main() {
                 'history': history,
                 'conversations': conversations,
                 'batteryUnrestricted': batteryUnrestricted,
+                'pausesOptimizedApps': pausesOptimizedApps,
               };
             case 'saveSetupStep':
               setupStep = (call.arguments as Map)['step'] as int;
@@ -251,6 +254,7 @@ void main() {
               return null;
             case 'settings':
             case 'appSettings':
+            case 'batterySettings':
             case 'openRepository':
             case 'bluetoothSettings':
             case 'clearHistory':
@@ -1283,25 +1287,33 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('a battery-optimized relay suggests running in the background', (
-    tester,
-  ) async {
-    access = true;
-    batteryUnrestricted = false;
-    await mount(tester);
-    // Only relevant while notifications are on.
-    expect(find.byKey(const ValueKey('battery-restricted')), findsNothing);
-    running = true;
-    await controller.refresh();
-    await tester.pumpAndSettle();
-    await tap(tester, 'battery-settings');
-    expect(calls, contains('appSettings'));
-    batteryUnrestricted = true;
-    await controller.refresh();
-    await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('battery-restricted')), findsNothing);
-    await tester.pumpWidget(const SizedBox());
-  });
+  testWidgets(
+    'only phones that pause optimized apps get the battery suggestion',
+    (tester) async {
+      access = true;
+      running = true;
+      batteryUnrestricted = false;
+      await mount(tester);
+      // Stock Android keeps the relay running while optimized: no nagging.
+      expect(find.byKey(const ValueKey('battery-restricted')), findsNothing);
+      pausesOptimizedApps = true;
+      await controller.refresh();
+      await tester.pumpAndSettle();
+      await tap(tester, 'battery-settings');
+      expect(calls, contains('batterySettings'));
+      batteryUnrestricted = true;
+      await controller.refresh();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('battery-restricted')), findsNothing);
+      // Not while notifications are off.
+      batteryUnrestricted = false;
+      running = false;
+      await controller.refresh();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('battery-restricted')), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 
   testWidgets('Home tab carries a dot only when something needs attention', (
     tester,
