@@ -418,6 +418,9 @@ class DemoController extends ChangeNotifier {
   bool? bluetoothEnabled;
   bool bluetoothPermission = false;
   bool? notificationControlsAllowed;
+
+  /// False when Android may pause Air Relay in the background to save battery.
+  bool? batteryUnrestricted;
   bool? paired;
   String relayOutcome = 'Relay is off.';
   String? setupError;
@@ -600,6 +603,7 @@ class DemoController extends ChangeNotifier {
       bluetoothPermission = state['bluetoothPermission'] == true;
       notificationControlsAllowed =
           state['notificationControlsAllowed'] as bool?;
+      batteryUnrestricted = state['batteryUnrestricted'] as bool?;
       relayOutcome = state['outcome'] as String? ?? 'Relay is off.';
       final selected = state['selectedApps'] as List?;
       if (selected != null) selectedApps = selected.cast<String>().toSet();
@@ -1215,6 +1219,10 @@ class DemoController extends ChangeNotifier {
     'PAIRING_REQUIRED' => 'Pair the Air in Google Health, then check again.',
     'HANDSHAKE_TIMEOUT' =>
       'The Air did not accept a secure session, probably because Google Health was using it. No vibration was sent; try again shortly.',
+    'AIR_NO_REPLY' =>
+      'Your Air didn’t answer in time. No vibration was sent; keep it near the phone and try again.',
+    'HAPTIC_UNCONFIRMED' =>
+      'Your Air stopped answering partway. It may have vibrated; keep it near the phone before trying again.',
     'CANNOT_CANCEL_WRITE' =>
       'This haptic must finish verification and restoration. Wait for completion.',
     'GATT_CONNECT' || 'GATT_DISCONNECTED' =>

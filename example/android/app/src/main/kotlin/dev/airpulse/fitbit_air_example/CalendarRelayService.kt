@@ -558,7 +558,7 @@ class CalendarRelayService : Service() {
 
         fun status(context: Context): Map<String, Any?> = mapOf(
             "notificationControlsAllowed" to context.getSystemService(android.app.NotificationManager::class.java).areNotificationsEnabled(),
-            "setupStep" to context.getSharedPreferences("relay_onboarding", MODE_PRIVATE).getInt("step", 0).coerceIn(0, 3),
+            "setupStep" to context.getSharedPreferences("relay_onboarding", MODE_PRIVATE).getInt("step", 0).coerceIn(0, 4),
             "setupCompleted" to context.getSharedPreferences("relay_onboarding", MODE_PRIVATE).getBoolean("completed", false),
             "access" to hasAccess(context),
             "connected" to CalendarNotificationListener.connected,
@@ -574,7 +574,11 @@ class CalendarRelayService : Service() {
             "bluetoothEnabled" to if (bluetoothPermission(context)) runCatching {
                 context.getSystemService(BluetoothManager::class.java).adapter?.isEnabled
             }.getOrNull() else null,
-            "outcome" to context.getSharedPreferences("calendar_relay", MODE_PRIVATE).getString("outcome", null)
+            "outcome" to context.getSharedPreferences("calendar_relay", MODE_PRIVATE).getString("outcome", null),
+            // Battery-optimized apps can be paused in the background on some phones, delaying buzzes.
+            "batteryUnrestricted" to runCatching {
+                context.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(context.packageName)
+            }.getOrNull(),
         )
     }
 }
