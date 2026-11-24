@@ -437,8 +437,9 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
                 startOperation(result, Operation.SinglePulse)
             }
             "stopRing" -> {
-                // Never refused: the wearer is being buzzed right now.
-                ringStopRequested = true
+                // Never refused: the wearer is being buzzed right now. Only an active
+                // ring is stopped; a stray stop must not end a later, unrelated ring.
+                if (activeOperation is Operation.Ring) ringStopRequested = true
                 result.success(null)
             }
             "ring" -> {
