@@ -579,6 +579,7 @@ class CalendarRelayService : Service() {
             "batteryUnrestricted" to runCatching {
                 context.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(context.packageName)
             }.getOrNull(),
+            "pausesOptimizedApps" to RelayBatteryPolicy.pausesOptimizedApps(Build.MANUFACTURER, Build.BRAND),
         )
     }
 }

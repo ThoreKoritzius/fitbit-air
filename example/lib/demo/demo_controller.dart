@@ -421,6 +421,14 @@ class DemoController extends ChangeNotifier {
 
   /// False when Android may pause Air Relay in the background to save battery.
   bool? batteryUnrestricted;
+
+  /// The phone maker's battery management pauses optimized apps even with a
+  /// foreground service (OPPO, Xiaomi and others); stock Android does not.
+  bool pausesOptimizedApps = false;
+
+  /// Worth suggesting unrestricted battery use: only where it matters.
+  bool get suggestUnrestrictedBattery =>
+      relayRunning && pausesOptimizedApps && batteryUnrestricted == false;
   bool? paired;
   String relayOutcome = 'Relay is off.';
   String? setupError;
@@ -604,6 +612,7 @@ class DemoController extends ChangeNotifier {
       notificationControlsAllowed =
           state['notificationControlsAllowed'] as bool?;
       batteryUnrestricted = state['batteryUnrestricted'] as bool?;
+      pausesOptimizedApps = state['pausesOptimizedApps'] == true;
       relayOutcome = state['outcome'] as String? ?? 'Relay is off.';
       final selected = state['selectedApps'] as List?;
       if (selected != null) selectedApps = selected.cast<String>().toSet();
@@ -1017,6 +1026,10 @@ class DemoController extends ChangeNotifier {
   }
 
   Future<void> openAppSettings() => channel.invokeMethod<void>('appSettings');
+
+  /// Air Relay's battery page where the phone supports it, else App info.
+  Future<void> openBatterySettings() =>
+      channel.invokeMethod<void>('batterySettings');
 
   Future<void> openNotificationControlsSettings() =>
       channel.invokeMethod<void>('notificationControlsSettings');
