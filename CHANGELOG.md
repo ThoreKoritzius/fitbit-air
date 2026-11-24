@@ -8,6 +8,11 @@
 - **Phones that show calls from a separate in-call app** (Samsung, Xiaomi,
   OPPO and others): Air Relay can now see that app, so its calls count as phone
   calls without selecting anything under Apps.
+- **Silent notifications no longer buzz** (#39). When Android keeps a
+  notification quiet on the phone, the Air stays quiet too: low-importance or
+  minimized channels (such as WhatsApp's background sync), notifications
+  posted with `setSilent(true)`, and updates that apps mark to alert only once.
+  Skipped ones appear in Recent activity as "Skipped · Silent".
 
 ## 0.4.0
 

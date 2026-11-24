@@ -259,10 +259,13 @@ class CalendarRelayService : Service() {
         }.getOrDefault(false)
     }
 
-    internal fun onAlert(packageName: String, key: String, postedAt: Long, ongoing: Boolean, summary: Boolean, messageTimestamp: Long?, conversationIds: Set<String>, tone: RelayTone? = null, keyword: RelayKeywordRule? = null) {
+    internal fun onAlert(packageName: String, key: String, postedAt: Long, ongoing: Boolean, summary: Boolean, messageTimestamp: Long?, conversationIds: Set<String>, tone: RelayTone? = null, keyword: RelayKeywordRule? = null,
+                         silent: Boolean = false, alertOnce: Boolean = false) {
         if (!ready || stopping) return
         val now = System.currentTimeMillis()
-        if (filter?.accept(packageName, key, postedAt, now, ongoing, summary, messageTimestamp) != true) return
+        if (filter?.accept(packageName, key, postedAt, now, ongoing, summary, messageTimestamp, alertOnce) != true) return
+        // Android keeps it quiet on the phone, so the Air stays quiet too.
+        if (silent) { record(nextId(), packageName, postedAt, "silent"); return }
         val config = RelayRuleStore.read(this)
         // The listener matched against the rules it saw; only keep a rule that still exists.
         val rule = keyword?.takeIf { it in config.keywords }
