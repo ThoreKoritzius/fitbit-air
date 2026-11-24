@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 
 import 'build_flavor.dart';
 import 'demo/demo_controller.dart';
+import 'demo/about_page.dart';
 import 'demo/app_theme.dart';
 import 'demo/relay_panel.dart';
 import 'demo/relay_status.dart';
@@ -269,42 +270,6 @@ class _DemoPageState extends State<DemoPage> with WidgetsBindingObserver {
     _controller.cancelCurrent = _cancelOperation;
   }
 
-  static const _repositoryUrl = 'https://github.com/ThoreKoritzius/fitbit-air';
-
-  Widget _repositoryLink(BuildContext context) => InkWell(
-    key: const ValueKey('about-repository'),
-    onTap: () async {
-      try {
-        await DemoController.channel.invokeMethod<void>('openRepository');
-      } on PlatformException {
-        await Clipboard.setData(const ClipboardData(text: _repositoryUrl));
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Link copied to the clipboard.')),
-          );
-        }
-      }
-    },
-    child: Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          const Icon(Icons.code, size: 18),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              'github.com/ThoreKoritzius/fitbit-air',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.primary,
-                decoration: TextDecoration.underline,
-              ),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-
   /// Home carries a dot when alerts may not arrive or setup needs a fix.
   Widget _homeDestination(BuildContext context) {
     final level = RelayStatus.fromController(_controller).level;
@@ -327,20 +292,6 @@ class _DemoPageState extends State<DemoPage> with WidgetsBindingObserver {
       tooltip: flagged ? 'Home, needs attention' : null,
     );
   }
-
-  Widget _madeWithLove(BuildContext context) => Semantics(
-    key: const ValueKey('about-credit'),
-    label: 'Made with love by Thore (The Centaurus)',
-    excludeSemantics: true,
-    child: Wrap(
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: const [
-        Text('Made with '),
-        Icon(Icons.favorite, size: 16, color: Color(0xffe25563)),
-        Text(' by Thore (The Centaurus)'),
-      ],
-    ),
-  );
 
   /// Relay-tab test: progress stays in the button; failures use a snackbar.
   Future<void> _testVibration() async {
@@ -1237,66 +1188,13 @@ class _DemoPageState extends State<DemoPage> with WidgetsBindingObserver {
                   key: const ValueKey('about-air-relay'),
                   tooltip: 'About Air Relay',
                   icon: const Icon(Icons.info_outline),
-                  onPressed: () => showAboutDialog(
-                    context: context,
-                    applicationName: 'Air Relay',
-                    applicationVersion: DemoController.appVersion,
-                    applicationIcon: const AirRelayMark(size: 48),
-                    children: [
-                      const Text(
-                        'An independent notification companion for Fitbit Air. Not affiliated with Google or Fitbit.',
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => AboutPage(
+                        controller: _controller,
+                        perform: (action) => _ui(action),
                       ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'Good to know:\n'
-                        '• Vibrations usually arrive a few seconds after the notification.\n'
-                        '• The Air must be near your phone; missed alerts are not replayed.\n'
-                        '• Air Relay uses an undocumented interface of the Air. A firmware update can stop it from working until Air Relay is updated.',
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Tested with Air firmware ${FitbitAir.testedFirmware.join(', ')}'
-                        '${_controller.firmware == null ? '' : '. Yours: ${_controller.firmware}'}.',
-                        key: const ValueKey('about-firmware'),
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                      const SizedBox(height: 12),
-                      _repositoryLink(context),
-                      Wrap(
-                        spacing: 4,
-                        children: [
-                          TextButton.icon(
-                            key: const ValueKey('about-updates'),
-                            onPressed: () => _ui(_controller.openReleases),
-                            icon: const Icon(
-                              Icons.system_update_outlined,
-                              size: 18,
-                            ),
-                            label: const Text('Check for updates'),
-                          ),
-                          TextButton.icon(
-                            key: const ValueKey('about-privacy'),
-                            onPressed: () => _ui(_controller.openPrivacyPolicy),
-                            icon: const Icon(
-                              Icons.privacy_tip_outlined,
-                              size: 18,
-                            ),
-                            label: const Text('Privacy policy'),
-                          ),
-                          TextButton.icon(
-                            key: const ValueKey('about-report'),
-                            onPressed: () => _ui(_controller.openIssues),
-                            icon: const Icon(
-                              Icons.bug_report_outlined,
-                              size: 18,
-                            ),
-                            label: const Text('Report a problem'),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      _madeWithLove(context),
-                    ],
+                    ),
                   ),
                 ),
               ],

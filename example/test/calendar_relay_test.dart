@@ -347,20 +347,52 @@ void main() {
     );
     expect(tester.takeException(), isNull);
     await tap(tester, 'about-air-relay');
+    expect(find.textContaining('An independent project'), findsOneWidget);
+    expect(find.byKey(const ValueKey('about-version')), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('about-firmware')),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(
-      find.textContaining('independent notification companion'),
+      find.descendant(
+        of: find.byKey(const ValueKey('about-firmware')),
+        matching: find.textContaining('Tested with'),
+      ),
       findsOneWidget,
     );
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('about-repository')),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(find.byKey(const ValueKey('about-repository')));
+    await tester.pumpAndSettle();
     expect(find.text('github.com/ThoreKoritzius/fitbit-air'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('about-repository')));
+    await tester.pump();
+    expect(calls, contains('openRepository'));
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('about-licenses')),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(find.byKey(const ValueKey('about-licenses')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('about-licenses')));
+    await tester.pumpAndSettle();
+    expect(find.byType(LicensePage), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('about-credit')),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(
       find.bySemanticsLabel('Made with love by Thore (The Centaurus)'),
       findsOneWidget,
     );
-    await tester.ensureVisible(find.byKey(const ValueKey('about-repository')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('about-repository')));
-    await tester.pump();
-    expect(calls, contains('openRepository'));
     await tester.pumpWidget(const SizedBox());
   });
 
