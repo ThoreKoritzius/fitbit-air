@@ -1,3 +1,31 @@
+## 0.3.0
+
+Air Relay only; the `fitbit_air` package is unchanged since 0.2.2.
+
+### Example app
+
+- **Rules, redesigned:** one overview grouped into *What buzzes*, *How it
+  buzzes* and *When it stays quiet*, with Apps, Chats, Keywords and Message
+  tone on their own pages and a short "Which rule wins?" explainer.
+- **Chats in any chat app:** save people and groups from WhatsApp, Signal,
+  Telegram, Messenger, Google Messages and other chat apps, and give each its
+  own vibration or mute it. "Only saved chats buzz" is now a per-app switch;
+  the earlier WhatsApp "Everyone else: silent" setting carries over.
+- **Keywords:** messages containing chosen words, phrases or emoji get their
+  own vibration, or stay silent. Checked on the phone only; asks for consent
+  first.
+- **Incoming calls** from your apps can buzz the Air (Android 14 and later).
+- **Only when the screen is off:** optionally stay quiet while you use the
+  phone.
+- **Find my Air:** a live signal-strength view under Device to find a nearby
+  Air.
+- Notifications stay on until you stop them, also after a reboot, an app
+  update or Android ending the app.
+- Select or deselect all apps at once, and sort selected apps first.
+- Fix relaying stopping after 256 different notification keys.
+- New About page with compatibility, help links and open-source licenses.
+- The Google Play build leaves out Developer tools.
+
 ## 0.2.2
 
 ### Package
