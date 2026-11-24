@@ -38,7 +38,7 @@ class CalendarNotificationListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val relay = CalendarRelayService.active
         val callType = callType(sbn.notification)
-        if (callType == Notification.CallStyle.CALL_TYPE_INCOMING) {
+        if (callType == RelayCallPolicy.INCOMING) {
             // Package only: never the caller. Lets a test call show whether it was recognized.
             android.util.Log.i("AirRelay", "incoming call from ${sbn.packageName}; relay ${if (relay == null) "off" else "on"}")
             relay?.onIncomingCall(sbn.packageName, sbn.key, sbn.postTime)
@@ -48,15 +48,15 @@ class CalendarNotificationListener : NotificationListenerService() {
             // Shape only, never the caller: which call-like notifications are not recognized as ringing.
             val n = sbn.notification
             android.util.Log.i("AirRelay", "call-like notification from ${sbn.packageName}: category=${n.category} type=$callType " +
-                "declared=${n.extras.getInt(Notification.EXTRA_CALL_TYPE)} fullScreen=${n.fullScreenIntent != null} " +
+                "declared=${n.extras.getInt(RelayCallPolicy.EXTRA_CALL_TYPE)} fullScreen=${n.fullScreenIntent != null} " +
                 "ongoing=${n.flags and Notification.FLAG_ONGOING_EVENT != 0} " +
                 "style=${n.extras.getString(Notification.EXTRA_TEMPLATE)?.substringAfterLast('$')}")
         }
         // A call notification that is no longer ringing means the call was answered or ended.
         // Other notifications never end a call.
         if (sbn.notification.category == Notification.CATEGORY_CALL) relay?.onCallEnded(sbn.key, "no longer ringing")
-        if (callType == Notification.CallStyle.CALL_TYPE_ONGOING ||
-            callType == Notification.CallStyle.CALL_TYPE_SCREENING) return
+        if (callType == RelayCallPolicy.ONGOING ||
+            callType == RelayCallPolicy.SCREENING) return
         runCatching { RelayConversations.observe(sbn.packageName, sbn.notification, sbn.isOngoing, appLabel(sbn.packageName)) }
             .onFailure { RelayConversations.captureError() }
         if (relay == null) return
@@ -138,18 +138,16 @@ class CalendarNotificationListener : NotificationListenerService() {
             ?.associate { it.key to latestMessageTimestamp(it.notification) } ?: emptyMap()
 
         fun existingRingingKeys(): List<String> = instance?.activeNotifications.orEmpty()
-            .filter { callType(it.notification) == Notification.CallStyle.CALL_TYPE_INCOMING }
+            .filter { callType(it.notification) == RelayCallPolicy.INCOMING }
             .map { it.key }
 
-        private fun callType(notification: Notification): Int {
-            if (Build.VERSION.SDK_INT < 34) return 0
-            return RelayCallPolicy.callType(
-                isCall = notification.category == Notification.CATEGORY_CALL,
-                summary = notification.flags and Notification.FLAG_GROUP_SUMMARY != 0,
-                declaredType = runCatching { notification.extras.getInt(Notification.EXTRA_CALL_TYPE) }.getOrDefault(0),
-                fullScreen = notification.fullScreenIntent != null,
-            )
-        }
+        /** Works on every Android version: older ones just never declare a call type. */
+        private fun callType(notification: Notification): Int = RelayCallPolicy.callType(
+            isCall = notification.category == Notification.CATEGORY_CALL,
+            summary = notification.flags and Notification.FLAG_GROUP_SUMMARY != 0,
+            declaredType = runCatching { notification.extras.getInt(RelayCallPolicy.EXTRA_CALL_TYPE) }.getOrDefault(0),
+            fullScreen = notification.fullScreenIntent != null,
+        )
 
         var connected = false
             private set
