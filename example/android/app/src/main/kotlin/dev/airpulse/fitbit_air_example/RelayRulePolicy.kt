@@ -58,6 +58,15 @@ internal data class RelaySilence(
     }
 }
 
+internal data class RelayCallRule(
+    val enabled: Boolean = false,
+    val preset: RelayPreset = RelayPreset.DOUBLE,
+) {
+    init { require(preset != RelayPreset.MUTE) }
+
+    fun match(): RelayMatch? = if (enabled) RelayMatch(preset, 3) else null
+}
+
 internal data class RelayRuleConfig(
     val defaultPreset: RelayPreset = RelayPreset.CURRENT,
     val apps: Map<String, RelayAppRule> = emptyMap(),
@@ -65,6 +74,7 @@ internal data class RelayRuleConfig(
     val silence: RelaySilence = RelaySilence(),
     val tone: RelayToneRules = RelayToneRules(),
     val everyoneElseSilent: Boolean = false,
+    val calls: RelayCallRule = RelayCallRule(),
 ) {
     val selectedPackages: Set<String> get() = apps.filterValues { it.enabled }.keys
     fun match(packageName: String, identities: Set<String>, tone: RelayTone? = null): RelayMatch? {
@@ -88,7 +98,11 @@ internal data class RelayRuleConfig(
 }
 
 /** Latest wins ties; a person-specific rule outranks an app default. */
-internal data class RelayBurstChoice(val match: RelayMatch, val receivedAt: Long) {
+internal data class RelayBurstChoice(
+    val match: RelayMatch,
+    val receivedAt: Long,
+    val ringingCall: RelayRingingCalls.Ring? = null,
+) {
     fun prefer(other: RelayBurstChoice): RelayBurstChoice =
         if (other.match.specificity > match.specificity ||
             (other.match.specificity == match.specificity && other.receivedAt >= receivedAt)) other else this

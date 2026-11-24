@@ -30,6 +30,7 @@ class CalendarRelayService : Service() {
     private var engine: FlutterEngine? = null
     private var channel: MethodChannel? = null
     private var filter: CalendarAlertFilter? = null
+    private val ringingCalls = RelayRingingCalls()
     private var wakeLock: PowerManager.WakeLock? = null
     private var pending = 0
     private var ready = false
@@ -210,6 +211,7 @@ class CalendarRelayService : Service() {
                                 check(hasAccess(this) && CalendarNotificationListener.connected)
                                 filter = CalendarAlertFilter(System.currentTimeMillis(),
                                     CalendarNotificationListener.existingKeys(selectedPackages), selectedPackages)
+                                CalendarNotificationListener.existingRingingKeys().forEach { ringingCalls.onIncoming(it) }
                                 ready = true
                                 settingsChanged()
                                 handler.removeCallbacks(watchdog)
@@ -254,8 +256,29 @@ class CalendarRelayService : Service() {
         submit(packageName, postedAt, match)
     }
 
+    internal fun onIncomingCall(packageName: String, key: String, postedAt: Long) {
+        if (!ready || stopping) return
+        val ring = ringingCalls.onIncoming(key) ?: return
+        val now = System.currentTimeMillis()
+        if (!acceptsPackage(packageName) || postedAt > now || now - postedAt >= 30_000) return
+        val config = RelayRuleStore.read(this)
+        val match = config.calls.match() ?: return
+        val silence = config.silence.reason(now)
+            ?: "phone_awake".takeIf { phoneAwake(config.silence) }
+        if (silence != null) {
+            record(nextId(), packageName, postedAt, silence, match = match)
+            return
+        }
+        submit(packageName, postedAt, match, ringingCall = ring)
+    }
+
+    internal fun onCallEnded(key: String) {
+        ringingCalls.onEnded(key)
+    }
+
     internal fun onAlertRemoved(key: String) {
         filter?.onRemoved(key)
+        onCallEnded(key)
     }
 
     internal fun testPulse(preset: String? = null, completion: ((RelayWorkerResult) -> Unit)? = null) {
@@ -267,7 +290,9 @@ class CalendarRelayService : Service() {
         submit(null, System.currentTimeMillis(), RelayMatch(selected, 2), completion)
     }
 
-    private fun submit(sbnPackage: String?, postedAt: Long, match: RelayMatch, completion: ((RelayWorkerResult) -> Unit)? = null) {
+    private fun submit(sbnPackage: String?, postedAt: Long, match: RelayMatch,
+                       completion: ((RelayWorkerResult) -> Unit)? = null,
+                       ringingCall: RelayRingingCalls.Ring? = null) {
         val id = nextId()
         if (choices.size >= 256) {
             record(id, sbnPackage, postedAt, "queue_full")
@@ -275,11 +300,11 @@ class CalendarRelayService : Service() {
             return
         }
         if (completion != null) previewReplies[id] = completion
-        choices[id] = RelayBurstChoice(match, System.currentTimeMillis())
+        choices[id] = RelayBurstChoice(match, System.currentTimeMillis(), ringingCall)
         record(id, sbnPackage, postedAt, "detected", match = match)
         val now = System.currentTimeMillis()
         when (val decision = coalescer.onAlert(id, now)) {
-            RelayCoalescer.Decision.DispatchNow -> dispatch(id, sbnPackage, postedAt, postedAt + 30_000, match)
+            RelayCoalescer.Decision.DispatchNow -> dispatch(id, sbnPackage, postedAt, postedAt + 30_000, match, ringingCall)
             is RelayCoalescer.Decision.Merged -> {
                 if (!holdingFollowUp) { holdingFollowUp = true; begin() }
                 inFlight[id] = sbnPackage to postedAt
@@ -302,7 +327,8 @@ class CalendarRelayService : Service() {
     private fun sendFollowUp() {
         if (stopping || !coalescer.hasFollowUp) return
         val now = System.currentTimeMillis()
-        val settings = RelayRuleStore.read(this).silence
+        val config = RelayRuleStore.read(this)
+        val settings = config.silence
         val silence = settings.reason(now)
         if (silence != null) { cancelWaiting(silence); return }
         val awake = phoneAwake(settings)
@@ -315,6 +341,7 @@ class CalendarRelayService : Service() {
             val stage = when {
                 now < source.second || now - source.second >= 30_000 -> "expired"
                 awake && source.first != null -> "phone_awake"
+                choice.ringingCall != null -> callSkipReason(config, source.first, choice.ringingCall)
                 else -> null
             }
             if (stage == null) true else {
@@ -329,7 +356,8 @@ class CalendarRelayService : Service() {
             val id = nextId()
             val replies = fresh.mapNotNull { previewReplies.remove(it.first) }
             if (replies.isNotEmpty()) previewReplies[id] = { result -> replies.forEach { it(result) } }
-            dispatch(id, winner.second.first, winner.second.second, winner.second.second + 30_000, winner.third.match)
+            dispatch(id, winner.second.first, winner.second.second, winner.second.second + 30_000,
+                winner.third.match, winner.third.ringingCall)
         } else coalescer.onFinished(now)
         holdingFollowUp = false
         end()
@@ -353,7 +381,15 @@ class CalendarRelayService : Service() {
         })
     }
 
-    private fun dispatch(id: String, sbnPackage: String?, postedAt: Long, expiresAt: Long, match: RelayMatch) {
+    private fun callSkipReason(config: RelayRuleConfig, packageName: String?, ring: RelayRingingCalls.Ring): String? =
+        when {
+            !ringingCalls.isRinging(ring) -> "call_ended"
+            !config.calls.enabled || packageName !in config.selectedPackages -> "filtered"
+            else -> null
+        }
+
+    private fun dispatch(id: String, sbnPackage: String?, postedAt: Long, expiresAt: Long,
+                         match: RelayMatch, ringingCall: RelayRingingCalls.Ring?) {
         val preset = match.preset
         begin()
         refreshDeadline()
@@ -369,11 +405,13 @@ class CalendarRelayService : Service() {
             coalescer.onFinished(now)?.let { if (!stopping) handler.postDelayed(followUp, maxOf(0, it - now)) }
             end()
         }
-        val settings = RelayRuleStore.read(this).silence
+        val config = RelayRuleStore.read(this)
+        val settings = config.silence
         val silence = settings.reason(System.currentTimeMillis())
             ?: "phone_awake".takeIf { sbnPackage != null && phoneAwake(settings) }
-        if (silence != null || System.currentTimeMillis() >= expiresAt) {
-            finished(RelayWorkerResult(silence ?: "expired", null)); return
+        val skip = silence ?: ringingCall?.let { callSkipReason(config, sbnPackage, it) }
+        if (skip != null || System.currentTimeMillis() >= expiresAt) {
+            finished(RelayWorkerResult(skip ?: "expired", null)); return
         }
         channel?.invokeMethod("dispatch", mapOf(
             "id" to id, "expiresAt" to expiresAt,

@@ -112,6 +112,41 @@ class _RulesPanelState extends State<RulesPanel> {
                   () => state.setOnlyWhileAsleep(enabled),
                 ),
         ),
+        if (state.settings.callAlertsSupported) ...[
+          SwitchListTile(
+            key: const ValueKey('incoming-calls'),
+            contentPadding: EdgeInsets.zero,
+            secondary: const Icon(Icons.phone_in_talk_outlined),
+            title: const Text('Incoming calls'),
+            subtitle: const Text('Buzz for ringing calls from selected apps.'),
+            value: state.settings.callAlertsEnabled,
+            onChanged: state.changingRelay
+                ? null
+                : (enabled) => widget.perform(
+                    () => state.setCallAlertsEnabled(enabled),
+                  ),
+          ),
+          if (state.settings.callAlertsEnabled)
+            ListTile(
+              key: const ValueKey('call-vibration'),
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.vibration),
+              title: const Text('Call vibration'),
+              subtitle: Text(state.settings.callPreset.label),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: state.changingRelay
+                  ? null
+                  : () => editVibration(
+                      context,
+                      state,
+                      title: 'Call vibration',
+                      initial: state.settings.callPreset,
+                      allowDefault: false,
+                      onSave: (preset) => state.saveCallPreset(preset!),
+                    ),
+            ),
+          const SizedBox(height: 12),
+        ],
         ..._toneRules(context, state, widget.perform),
         const SizedBox(height: 24),
         Text('Your apps', style: Theme.of(context).textTheme.titleLarge),

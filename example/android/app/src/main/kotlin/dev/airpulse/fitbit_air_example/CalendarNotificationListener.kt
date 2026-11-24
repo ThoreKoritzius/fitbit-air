@@ -36,9 +36,18 @@ class CalendarNotificationListener : NotificationListenerService() {
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
+        val relay = CalendarRelayService.active
+        val callType = callType(sbn.notification)
+        if (callType == Notification.CallStyle.CALL_TYPE_INCOMING) {
+            relay?.onIncomingCall(sbn.packageName, sbn.key, sbn.postTime)
+            return
+        }
+        relay?.onCallEnded(sbn.key)
+        if (callType == Notification.CallStyle.CALL_TYPE_ONGOING ||
+            callType == Notification.CallStyle.CALL_TYPE_SCREENING) return
         runCatching { RelayConversations.observe(sbn.packageName, sbn.notification, sbn.isOngoing) }
             .onFailure { RelayConversations.captureError() }
-        val relay = CalendarRelayService.active ?: return
+        if (relay == null) return
         if (!relay.acceptsPackage(sbn.packageName)) return
         // Opt-in: the text stays local to this call; only the tone reaches the relay.
         val tone = if (!relay.toneEnabled) null else runCatching {
@@ -99,6 +108,16 @@ class CalendarNotificationListener : NotificationListenerService() {
         fun existingKeys(selectedPackages: Set<String>): Map<String, Long?> = instance?.activeNotifications
             ?.filter { it.packageName in selectedPackages }
             ?.associate { it.key to latestMessageTimestamp(it.notification) } ?: emptyMap()
+
+        fun existingRingingKeys(): List<String> = instance?.activeNotifications.orEmpty()
+            .filter { callType(it.notification) == Notification.CallStyle.CALL_TYPE_INCOMING }
+            .map { it.key }
+
+        private fun callType(notification: Notification): Int {
+            if (Build.VERSION.SDK_INT < 34 || notification.category != Notification.CATEGORY_CALL ||
+                notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return 0
+            return runCatching { notification.extras.getInt(Notification.EXTRA_CALL_TYPE) }.getOrDefault(0)
+        }
 
         var connected = false
             private set

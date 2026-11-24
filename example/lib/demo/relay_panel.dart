@@ -499,6 +499,7 @@ class RelayPanel extends StatelessWidget {
       'paused' => 'Quiet: notifications paused',
       'quiet_hours' => 'Quiet: scheduled quiet hours',
       'phone_awake' => 'Quiet: phone awake',
+      'call_ended' => 'Skipped: call stopped ringing',
       'filtered' => 'Skipped by your rules',
       'merged' => 'Merged into next vibration',
       'queued' => 'Queued',

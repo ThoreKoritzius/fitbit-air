@@ -154,6 +154,20 @@ revision needs its own physical acceptance test. Tag/publish 0.1.2 only after th
 checklist passes. Automatic reboot recovery and durable replay protection remain
 future work.
 
+## Incoming calls
+
+On Android 14 and later, turn on **Rules → Incoming calls**, choose a call
+vibration, and enable the Phone app or calling app under **Your apps**. Leave
+the relay running. This works when the calling app posts Android’s standard
+incoming-call notification. App and device support can vary.
+
+Air Relay queues at most one vibration per ringing notification. A ringing call takes
+priority over messages in the same queued burst. The usual cooldown still
+applies between Bluetooth commands. If a call stops ringing before dispatch,
+its vibration is skipped. Pause, quiet hours, and the phone sleep rule also
+apply. Air Relay uses its existing notification access and does not request
+the phone permission, call log, or caller number.
+
 ## WhatsApp people
 
 This example-only feature supports WhatsApp and WhatsApp Business. Other apps

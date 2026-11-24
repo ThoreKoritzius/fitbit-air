@@ -65,6 +65,9 @@ class RelaySettings {
     this.startMinute = 1320,
     this.endMinute = 420,
     this.silenceReason,
+    this.callAlertsSupported = false,
+    this.callAlertsEnabled = false,
+    this.callPreset = VibrationPreset.doublePulse,
     this.toneEnabled = false,
     this.toneUrgent,
     this.toneNegative,
@@ -82,6 +85,10 @@ class RelaySettings {
   final int startMinute;
   final int endMinute;
   final String? silenceReason;
+
+  final bool callAlertsSupported;
+  final bool callAlertsEnabled;
+  final VibrationPreset callPreset;
 
   /// Message tone presets; null keeps the app or chat vibration.
   final bool toneEnabled;
@@ -118,6 +125,9 @@ class RelaySettings {
       startMinute: map['startMinute'] as int? ?? 1320,
       endMinute: map['endMinute'] as int? ?? 420,
       silenceReason: map['silenceReason'] as String?,
+      callAlertsSupported: map['callAlertsSupported'] == true,
+      callAlertsEnabled: map['callAlertsEnabled'] == true,
+      callPreset: optional(map['callPreset']) ?? VibrationPreset.doublePulse,
       toneEnabled: map['toneEnabled'] == true,
       toneUrgent: optional(map['toneUrgent']),
       toneNegative: optional(map['toneNegative']),
