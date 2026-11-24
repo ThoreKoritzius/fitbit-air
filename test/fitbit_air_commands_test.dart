@@ -103,6 +103,53 @@ void main() {
     },
   );
 
+  test('event keys have deterministic, unambiguous command IDs', () {
+    final expiresAt = clock.now().add(const Duration(minutes: 1));
+    String id(String source, String eventKey) => AirHapticCommand.fromEventKey(
+      source: source,
+      eventKey: eventKey,
+      expiresAt: expiresAt,
+    ).id;
+
+    expect(
+      id('app:chat', '123'),
+      '6ce79edf856bceb077a1d1962db28627cff64278b408ccffae0de850bf1be37f',
+    );
+    expect(id('app:chat', '123'), isNot(id('app', 'chat:123')));
+    expect(id('app:chat', '123'), isNot(id('another-app', '123')));
+    expect(() => id(' ', '123'), throwsArgumentError);
+    expect(() => id('app:chat', ' '), throwsArgumentError);
+  });
+
+  test('long event keys deduplicate retries but allow new messages', () async {
+    final notificationKey = 'outlook-notification-' * 12;
+    expect(() => command(notificationKey), throwsArgumentError);
+    expect(command('app-id').id, 'app-id');
+
+    AirHapticCommand message(int timestamp) => AirHapticCommand.fromEventKey(
+      source: 'com.microsoft.office.outlook',
+      eventKey: '$notificationKey:$timestamp',
+      expiresAt: clock.now().add(const Duration(minutes: 1)),
+    );
+
+    final dispatcher = AirHapticDispatcher(minimumInterval: Duration.zero);
+    addTearDown(dispatcher.close);
+
+    final first = message(1);
+    expect(first.id, matches(r'^[0-9a-f]{64}$'));
+    final results = await Future.wait([
+      dispatcher.submit(first),
+      dispatcher.submit(message(1)),
+      dispatcher.submit(message(2)),
+    ]);
+    expect(results.map((result) => result.status), [
+      AirHapticDispatchStatus.completed,
+      AirHapticDispatchStatus.duplicate,
+      AirHapticDispatchStatus.completed,
+    ]);
+    expect(calls, ['vibrate', 'vibrate']);
+  });
+
   test('expired messages never invoke the device', () {
     fakeAsync((time) {
       final dispatcher = AirHapticDispatcher();

@@ -83,6 +83,14 @@ delays, remembers accepted IDs even after ambiguous failures, and does not
 automatically retry a device command. Deduplication is bounded by both a time
 window and cache capacity; it is not a durable at-most-once delivery guarantee.
 
+Use `AirHapticCommand.fromEventKey` with a stable source namespace and an ID for
+the individual event. It derives a 64-character command ID even from a long
+Android notification key. If a conversation reuses the same notification key,
+include a stable message ID or the original message timestamp so each new
+message can trigger a pulse. Reuse the same inputs when retrying the same
+event. The regular constructor accepts an application-assigned, nonblank ID of
+at most 128 UTF-16 code units.
+
 ```dart
 import 'package:fitbit_air/fitbit_air_commands.dart';
 
@@ -93,8 +101,9 @@ final haptics = AirHapticDispatcher();
 Future<AirHapticDispatchResult> handleTouch(
   String messageId,
   DateTime expiresAt,
-) => haptics.submit(AirHapticCommand(
-  id: messageId,
+) => haptics.submit(AirHapticCommand.fromEventKey(
+  source: 'my-app.messages',
+  eventKey: messageId,
   expiresAt: expiresAt,
   kind: AirHapticKind.tap, // One pulse; the wearer's strength is kept.
 ));
