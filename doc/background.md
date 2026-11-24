@@ -109,10 +109,6 @@ Future<AirHapticDispatchResult> handleTouch(
 ));
 ```
 
-The `id` must be 1–128 characters, otherwise the constructor throws. Android
-notification keys can be longer (an Outlook email key on a Samsung A54 was
-well past 128), so hash such keys into a fixed-length ID before using them.
-
 Omit `kind` for the two-pulse preview with best-effort restoration. A completed
 result means the SDK's verification passed, not that the recipient felt it.
 `failed` carries the SDK error, including BUSY. `duplicate`, `expired`,

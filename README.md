@@ -268,9 +268,6 @@ await haptics.submit(AirHapticCommand.fromEventKey(
 ));
 ```
 
-`id` must be 1–128 characters; hash longer keys (such as Android notification
-keys) first.
-
 Receiving notifications and keeping your app alive in the background are up
 to your app; see [background integration](doc/background.md). The example app
 implements a complete notification relay.
