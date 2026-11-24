@@ -201,13 +201,6 @@ class _VibrationEditorState extends State<_VibrationEditor> {
                 : () => run(() => widget.onSave(selected), save: true),
             child: const Text('Save'),
           ),
-          if (widget.allowMute)
-            const Padding(
-              padding: EdgeInsets.only(top: 12),
-              child: Text(
-                'Use app default removes the custom override. Selected-chat restrictions still apply.',
-              ),
-            ),
           SizedBox(height: MediaQuery.viewInsetsOf(context).bottom + 16),
         ],
       ),

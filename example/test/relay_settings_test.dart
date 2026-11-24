@@ -40,7 +40,7 @@ void main() {
                 'preset': 'mute',
               },
             ],
-            'everyoneElseSilent': true,
+            'onlySavedChats': ['com.whatsapp'],
             'pauseUntil': -1,
             'silenceReason': 'paused',
             'quietEnabled': true,
@@ -49,6 +49,12 @@ void main() {
             'toneEnabled': true,
             'toneUrgent': 'double',
             'toneNegative': null,
+            'keywordRules': [
+              {
+                'words': ['private keyword', '🚨'],
+                'preset': 'mute',
+              },
+            ],
           },
         },
       );
@@ -57,6 +63,10 @@ void main() {
       expect(controller.settings.toneUrgent, VibrationPreset.doublePulse);
       expect(controller.settings.toneNegative, isNull);
       expect(controller.settings.toneNeutral, isNull);
+      final rule = controller.settings.keywordRules.single;
+      expect(rule.words, ['private keyword', '🚨']);
+      expect(rule.preset, VibrationPreset.mute);
+      expect(controller.exportJson(), isNot(contains('private keyword')));
       expect(controller.settings.defaultPreset, VibrationPreset.doublePulse);
       expect(
         controller.settings.apps['com.whatsapp']?.preset,
@@ -65,7 +75,7 @@ void main() {
       final chat = controller.settings.chats.single;
       expect(chat.preset, VibrationPreset.mute);
       expect(chat.nameMatch, isTrue);
-      expect(controller.settings.everyoneElseSilent, isTrue);
+      expect(controller.settings.onlySavedChats, {'com.whatsapp'});
       expect(controller.exportJson(), isNot(contains('Private label')));
       expect(controller.settings.silenceReason, 'paused');
       expect(controller.exportJson(), isNot(contains('private-chat-identity')));

@@ -65,7 +65,7 @@ void main() {
       'defaultPreset': 'single',
       'apps': <String, Object?>{},
       'chats': <Map<String, Object?>>[],
-      'everyoneElseSilent': false,
+      'onlySavedChats': <String>[],
       'pauseUntil': 0,
       'quietEnabled': false,
       'startMinute': 1320,
@@ -115,8 +115,17 @@ void main() {
             case 'completeSetup':
               setupCompleted = true;
               return null;
-            case 'setEveryoneElseSilent':
-              rules['everyoneElseSilent'] = (call.arguments as Map)['silent'];
+            case 'setOnlySavedChats':
+              final args = call.arguments as Map;
+              final apps = {
+                ...(rules['onlySavedChats'] as List).cast<String>(),
+              };
+              if (args['enabled'] == true) {
+                apps.add(args['packageName'] as String);
+              } else {
+                apps.remove(args['packageName']);
+              }
+              rules['onlySavedChats'] = apps.toList();
               return null;
             case 'captureConversations':
               conversations['captureRemainingMillis'] =
@@ -199,6 +208,9 @@ void main() {
                 'toneNegative': args['negative'],
                 'toneNeutral': args['neutral'],
               });
+              return null;
+            case 'saveKeywordRules':
+              rules['keywordRules'] = (call.arguments as Map)['rules'];
               return null;
             case 'saveQuietHours':
               final args = call.arguments as Map;
@@ -284,13 +296,15 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('nav-device')));
       await tester.pumpAndSettle();
     }
+    // Rows on the Rules tab, and the chat list page behind one of them.
     if (key == 'app-picker' ||
         key == 'conversation-picker' ||
+        key == 'keyword-rules' ||
+        key == 'message-tone-row' ||
         (key == 'add-chat' &&
-            find.byKey(const ValueKey('everyone-else')).evaluate().isEmpty)) {
+            find.byKey(const ValueKey('chats-scroll')).evaluate().isEmpty)) {
       await tester.tap(find.byKey(const ValueKey('nav-rules')));
       await tester.pumpAndSettle();
-      if (key == 'app-picker') return;
       if (key == 'add-chat') {
         await tester.tap(find.byKey(const ValueKey('conversation-picker')));
         await tester.pumpAndSettle();
@@ -753,14 +767,14 @@ void main() {
   });
 
   testWidgets(
-    'app toggles keep rows stable until regrouping or reopening Rules',
+    'app toggles keep rows stable until regrouping or reopening Apps',
     (tester) async {
       tester.view.physicalSize = const Size(900, 1800);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
       await mount(tester);
-      await tap(tester, 'nav-rules');
+      await tap(tester, 'app-picker');
       final whatsapp = find.byKey(const ValueKey('app-com.whatsapp'));
       final signal = find.byKey(
         const ValueKey('app-org.thoughtcrime.securesms'),
@@ -779,8 +793,9 @@ void main() {
       expect(y(whatsapp), lessThan(y(signal)));
       await tap(tester, 'app-enabled-com.whatsapp');
       expect(y(whatsapp), lessThan(y(signal)));
-      await tap(tester, 'nav-relay');
-      await tap(tester, 'nav-rules');
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tap(tester, 'app-picker');
       expect(y(whatsapp), greaterThan(y(signal)));
       await tester.pumpWidget(const SizedBox());
     },
@@ -919,10 +934,13 @@ void main() {
       await mount(tester);
       await tap(tester, 'add-chat');
       expect(controller.captureRemainingMillis, 60000);
-      expect(find.text('Listening for new messages…'), findsOneWidget);
+      expect(find.textContaining('Waiting for new messages'), findsOneWidget);
       await tap(tester, 'add-abcdef012345');
       expect(controller.settings.chats.single.label, 'Private Alice');
-      expect(find.textContaining('Added · App vibration'), findsOneWidget);
+      expect(
+        find.textContaining('Added · WhatsApp · Same as app'),
+        findsOneWidget,
+      );
       expect(controller.exportJson(), isNot(contains('Private Alice')));
       expect(controller.exportJson(), isNot(contains('abcdef012345')));
       expect(controller.report()['relay'], containsPair('savedChatCount', 1));
@@ -936,21 +954,33 @@ void main() {
     },
   );
 
-  testWidgets('everyone else can be silenced without stopping the relay', (
+  testWidgets('only saved chats can buzz per app without stopping the relay', (
     tester,
   ) async {
     access = true;
     running = true;
+    selected.addAll(['com.whatsapp', 'org.thoughtcrime.securesms']);
     await mount(tester);
     await tap(tester, 'conversation-picker');
-    expect(find.text('Vibrates with the app vibration'), findsOneWidget);
-    await tap(tester, 'everyone-else');
-    expect(controller.settings.everyoneElseSilent, isTrue);
-    expect(find.textContaining('No WhatsApp chat can vibrate'), findsOneWidget);
+    // Every turned-on chat app gets its own switch; the calendar does not.
+    expect(
+      find.byKey(const ValueKey('only-saved-org.thoughtcrime.securesms')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('only-saved-com.google.android.calendar')),
+      findsNothing,
+    );
+    await tap(tester, 'only-saved-com.whatsapp');
+    expect(controller.settings.onlySavedChats, {'com.whatsapp'});
+    expect(find.text('Nobody saved yet, so nothing buzzes'), findsOneWidget);
     expect(
       controller.report()['relay'],
-      containsPair('everyoneElseSilent', true),
+      containsPair('onlySavedChatAppCount', 1),
     );
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Only saved chats in WhatsApp'), findsOneWidget);
     expect(running, isTrue);
     expect(calls, isNot(contains('stop')));
     await tester.pumpWidget(const SizedBox());
@@ -963,12 +993,15 @@ void main() {
     nameCandidate = true;
     await mount(tester);
     await tap(tester, 'add-chat');
-    expect(find.text('Matched by name'), findsOneWidget);
+    expect(find.text('WhatsApp · Matched by name'), findsOneWidget);
     await tap(tester, 'add-abcdef012345');
     expect(lastSelection, {'id': 'abcdef012345', 'preset': null});
     expect(controller.settings.chats.single.nameMatch, isTrue);
     await tap(tester, 'close-add-chat');
-    expect(find.textContaining('"Matched by name" means'), findsOneWidget);
+    expect(
+      find.textContaining('“Matched by name”: the app gave no chat ID'),
+      findsOneWidget,
+    );
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -1076,7 +1109,7 @@ void main() {
     await tester.pumpAndSettle();
     await tap(tester, 'capture-details');
     expect(
-      find.textContaining('No WhatsApp notifications arrived'),
+      find.textContaining('No chat notifications arrived'),
       findsOneWidget,
     );
     expect(controller.captureDiagnostics, {'seen': 0});
@@ -1087,12 +1120,7 @@ void main() {
   testWidgets('message tone asks before reading message text', (tester) async {
     access = true;
     await mount(tester);
-    await tap(tester, 'nav-rules');
-    await tester.scrollUntilVisible(
-      find.byKey(const ValueKey('message-tone')),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
+    await tap(tester, 'message-tone-row');
     expect(
       find.byKey(const ValueKey('message-tone-experimental')),
       findsOneWidget,
@@ -1107,6 +1135,65 @@ void main() {
     await tap(tester, 'message-tone-confirm');
     expect(calls, contains('saveToneRules'));
     expect(controller.settings.toneEnabled, isTrue);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('keyword rules ask once, keep their order and can be deleted', (
+    tester,
+  ) async {
+    access = true;
+    running = true;
+    await mount(tester);
+    await tap(tester, 'keyword-rules');
+    expect(find.byKey(const ValueKey('keyword-rules-empty')), findsOneWidget);
+    await tap(tester, 'add-keyword-rule');
+    await tester.enterText(
+      find.byKey(const ValueKey('keyword-input')),
+      'urgent, sofort, 🔥',
+    );
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('keyword-chip-urgent')), findsOneWidget);
+    expect(find.byKey(const ValueKey('keyword-chip-🔥')), findsOneWidget);
+    await tap(tester, 'save-keyword-rule');
+    expect(find.byKey(const ValueKey('keyword-consent')), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(calls, isNot(contains('saveKeywordRules')));
+    await tap(tester, 'save-keyword-rule');
+    await tap(tester, 'keyword-consent-confirm');
+    final first = controller.settings.keywordRules.single;
+    expect(first.words, containsAll(['urgent', 'sofort', '🔥']));
+    expect(first.preset, VibrationPreset.doublePulse);
+
+    // Text is already being checked, so the second rule does not ask again.
+    await tap(tester, 'add-keyword-rule');
+    await tester.enterText(
+      find.byKey(const ValueKey('keyword-input')),
+      'unsubscribe',
+    );
+    await tap(tester, 'keyword-preset-mute');
+    await tap(tester, 'save-keyword-rule');
+    expect(find.byKey(const ValueKey('keyword-consent')), findsNothing);
+    expect(controller.settings.keywordRules.map((rule) => rule.preset), [
+      VibrationPreset.doublePulse,
+      VibrationPreset.mute,
+    ]);
+    // Reports carry the count only, never the keywords.
+    expect(controller.exportJson(), isNot(contains('unsubscribe')));
+    expect(
+      controller.report()['settings'],
+      containsPair('keywordRuleCount', 2),
+    );
+
+    await tap(tester, 'keyword-rule-1');
+    await tap(tester, 'delete-keyword-rule');
+    expect(controller.settings.keywordRules, hasLength(1));
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('1 rule'), findsOneWidget);
+    expect(running, isTrue);
+    expect(calls, isNot(contains('stop')));
     await tester.pumpWidget(const SizedBox());
   });
 

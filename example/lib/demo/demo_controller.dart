@@ -433,7 +433,7 @@ class DemoController extends ChangeNotifier {
   int unsupportedConversations = 0;
   Map<String, int> captureDiagnostics = {};
 
-  /// Chats found in WhatsApp notifications while finding chats; saved ones are in [settings].
+  /// Chats found in chat notifications while finding chats; saved ones are in [settings].
   List<SavedChat> conversationCandidates = [];
   int secureDurationSeconds = 30;
   Timer? _poll;
@@ -751,10 +751,24 @@ class DemoController extends ChangeNotifier {
   Future<void> saveChat(String id, VibrationPreset? preset) =>
       _relayCall('saveChat', {'id': id, 'preset': preset?.id});
   Future<void> removeChat(String id) => _relayCall('removeChat', {'id': id});
-  Future<void> setEveryoneElseSilent(bool silent) =>
-      _relayCall('setEveryoneElseSilent', {'silent': silent});
 
-  /// Lists chats from current WhatsApp notifications and listens for new ones for a minute.
+  /// In [packageName], only saved chats buzz when [enabled].
+  Future<void> setOnlySavedChats(String packageName, bool enabled) =>
+      _relayCall('setOnlySavedChats', {
+        'packageName': packageName,
+        'enabled': enabled,
+      });
+
+  /// The app's name on this phone, or a known chat app's name.
+  String appLabel(String packageName) =>
+      apps
+          .where((app) => app['packageName'] == packageName)
+          .map((app) => app['label'] as String?)
+          .firstOrNull ??
+      knownChatApps[packageName] ??
+      'Chat app';
+
+  /// Lists chats from current chat notifications and listens for new ones for a minute.
   Future<void> findChats(bool listen) =>
       _relayCall('captureConversations', {'enabled': listen});
   Future<void> saveDefaultPreset(VibrationPreset preset) =>
@@ -786,6 +800,12 @@ class DemoController extends ChangeNotifier {
     'negative': negative?.id,
     'neutral': neutral?.id,
   });
+
+  /// Replaces all keyword rules; order decides which rule wins.
+  Future<void> saveKeywordRules(List<KeywordRule> rules) =>
+      _relayCall('saveKeywordRules', {
+        'rules': [for (final rule in rules) rule.toMap()],
+      });
 
   Future<void> previewPreset(VibrationPreset preset) {
     if (_previewInFlight != null) {
@@ -1155,11 +1175,11 @@ class DemoController extends ChangeNotifier {
     },
     'relay': {
       'running': relayRunning,
-      // Message tone categories stay on screen; shared reports leave them out.
+      // Message tone and keyword categories stay on screen; shared reports leave them out.
       'history': [
         for (final entry in history) {...entry}..remove('tone'),
       ],
-      'everyoneElseSilent': settings.everyoneElseSilent,
+      'onlySavedChatAppCount': settings.onlySavedChats.length,
       'savedChatCount': settings.chats.length,
       'captureDiagnostics': captureDiagnostics,
     },
@@ -1171,6 +1191,8 @@ class DemoController extends ChangeNotifier {
       'silenceReason': settings.silenceReason,
       'quietEnabled': settings.quietEnabled,
       'toneEnabled': settings.toneEnabled,
+      // Only the count: keywords can name people or topics.
+      'keywordRuleCount': settings.keywordRules.length,
     },
     'trials': _trials,
     'manualObservations': _observations,

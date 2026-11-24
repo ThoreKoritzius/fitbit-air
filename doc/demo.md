@@ -7,8 +7,10 @@ notification filtering and Android lifecycle management are not package APIs.
 
 - **Home:** relay status, Start/Stop, timed pause, default vibration preview,
   setup checks and recent outcomes.
-- **Rules:** selected apps, per-app/chat vibration presets, WhatsApp people and
-  restrictions, and daily quiet hours. App edits apply to new alerts while on.
+- **Rules:** an overview grouped as *What buzzes* (Apps, Chats, Keywords,
+  Incoming calls), *How it buzzes* (default vibration, Message tone) and *When it
+  stays quiet* (quiet hours, screen-off only). Apps, Chats, Keywords and Message
+  tone each open their own page. Edits apply to new alerts while on.
 - **Device:** pairing, device controls/information, heart rate and historical
   wrist observation. **Developer tools** opens Lab.
 - **Lab:** existing monitors, probes, headless tests, timed wrist/alarm trials,
@@ -168,37 +170,42 @@ its vibration is skipped. Pause, quiet hours, and the phone sleep rule also
 apply. Air Relay uses its existing notification access and does not request
 the phone permission, call log, or caller number.
 
-## WhatsApp people
+## Chats
 
-This example-only feature supports WhatsApp and WhatsApp Business. Other apps
-keep their app rule. Changes apply immediately, also while the relay is running.
+Chat rules work in any chat app that posts conversation notifications
+(MessagingStyle or the message category): WhatsApp and WhatsApp Business,
+Signal, Telegram, Messenger, Google Messages and others. Changes apply
+immediately, also while the relay is running.
 
-1. Open **Rules > WhatsApp people**. Saved people and groups are listed with their
-   vibration; tap one to change it (or mute it), or tap **×** to remove it.
-2. **Everyone else** controls chats you have not saved. On, they vibrate with the
-   app vibration. Off (silent), only saved chats vibrate; with nobody saved, no
-   WhatsApp chat vibrates.
-3. Tap **Add person or group**. The sheet lists chats from current WhatsApp
-   notifications and listens for new ones for a minute. Tap **Add** next to a
+1. Open **Rules → Chats**. **Your chats** lists saved people and groups with
+   their app and vibration; tap one to change it (or mute it), or tap **×** to
+   remove it.
+2. **Only saved chats buzz** has one switch per turned-on chat app (well-known
+   chat apps, apps with a saved chat, and apps already restricted). Off, every
+   chat in that app buzzes. On, only saved chats buzz there; with nobody saved,
+   nothing from that app buzzes. Other apps are unaffected.
+3. Tap **Add a chat**. The sheet lists chats from the turned-on apps' current
+   notifications and waits for new ones for a minute. Tap **Add** next to a
    chat; it starts with the app vibration, and tapping it again changes that.
    If someone is missing, ask them to send a message, or leave one of their
-   messages unread, then tap **Listen again**. Closing the sheet stops listening;
+   messages unread, then tap **Wait again**. Closing the sheet stops waiting;
    found chats stay addable for five minutes.
-4. A chat is matched by its conversation ID when WhatsApp provides one. Otherwise
+4. A chat is matched by its conversation ID when the app provides one. Otherwise
    it is **Matched by name**: the exact notification chat name is used, so
    renaming the chat stops matching and another chat with the same name matches
    too. The page explains this when such a chat is saved.
 5. Test a fresh message with the phone locked, and one from a chat you have not
-   saved, with **Everyone else** on and off.
+   saved, with **Only saved chats buzz** on and off for that app.
 
 A saved direct chat is one person; a saved group covers everyone in it. Sender
 matching inside a group is not implemented. Name matching uses the current
 notification's conversation title (or title), never senders from message
-history, and needs message metadata; generic app titles, blank titles and titles
-over 512 characters are rejected.
+history, and needs conversation metadata; generic titles (the app's own name),
+blank titles and titles over 512 characters are rejected. Identities are hashed
+with the app, so a chat saved in one app never matches in another.
 
-**Nobody found?** appears when listening finished without results. It explains
-whether no WhatsApp notification arrived, notifications lacked chat details, or
+**Nobody found?** appears when waiting finished without results. It explains
+whether no chat notification arrived, notifications lacked chat details, or
 only summaries arrived, and **Copy sanitized debug report** copies the safe
 counts (notifications seen, unread snapshot, summaries, ongoing, missing IDs,
 name-only, unusable, errors). Counts contain no names, IDs, notification keys,
@@ -209,198 +216,63 @@ minutes, listener disconnection or process death. Up to 64 saved chats (label,
 app, match type, vibration and a hashed rule ID) are stored with the relay rules
 in app-private preferences, which are excluded from cloud backup and device
 transfer. Raw shortcut IDs and exact titles are hashed with app/type namespaces;
-the original stable-ID hash format is preserved. Rules saved by earlier versions,
-where saved chats and the **All chats/Selected** mode were stored separately, are
-merged once on upgrade: **Selected** becomes **Everyone else: silent**.
+the original stable-ID hash format is preserved, so chats saved by earlier
+versions keep matching. The earlier WhatsApp-only **Everyone else: silent**
+switch migrates to **Only saved chats buzz** for WhatsApp and WhatsApp Business,
+and is still written alongside the new `onlySavedChats` list for downgrades.
 
-Reports include only whether everyone else is silent, the saved-chat count, the
-number of chats with their own vibration and the capture counts, never names,
-IDs or found chats.
+Reports include only how many apps are set to only saved chats, the saved-chat
+count, the number of chats with their own vibration and the capture counts,
+never names, IDs or found chats.
 
 For agent-driven local setup, `DemoController` offers `findChats(listen)`,
 `saveChat(id, preset)` (adds a found chat or changes a saved chat's vibration;
 `null` uses the app vibration), `removeChat(id)` and
-`setEveryoneElseSilent(silent)`. Stable UI keys include `conversation-picker`,
-`everyone-else`, `add-chat`, `chat-<id>`, `remove-chat-<id>`,
-`confirm-remove-chat`, `candidate-<id>`, `add-<id>`, `listen-again`,
-`close-add-chat`, `capture-details` and `copy-capture-report`. Private names and
-IDs exist only in local controller state; do not copy them into test logs or PRs.
+`setOnlySavedChats(packageName, enabled)`. Stable UI keys include
+`conversation-picker`, `only-saved-<packageName>`, `add-chat`, `chat-<id>`,
+`remove-chat-<id>`, `confirm-remove-chat`, `candidate-<id>`, `add-<id>`,
+`listen-again`, `close-add-chat`, `capture-details` and `copy-capture-report`.
+Private names and IDs exist only in local controller state; do not copy them
+into test logs or PRs.
 
-Physical acceptance remains pending. Test finding unread and new messages,
-listening again, missing-ID chats, saved versus unsaved chats with Everyone else
-on and off, edits while the relay runs, groups, Business/app separation, private
-notifications, upgrade from a Selected setup, process restart and removal. Local
-tests cannot establish what metadata WhatsApp supplies on the paired phone.
+Physical acceptance remains pending. Test finding unread and new messages in
+WhatsApp and at least one other chat app, waiting again, missing-ID chats, saved
+versus unsaved chats with **Only saved chats buzz** on and off, edits while the
+relay runs, groups, app separation, private notifications, upgrade from an
+**Everyone else: silent** setup, process restart and removal. Local tests cannot
+establish what metadata each chat app supplies on the paired phone.
 
-### Investigating Health sync after relay use (dev.3)
+## Keywords and message tone
 
-The copied debug report now includes `transport`: the app-local lease and the
-last 16 command cleanup traces across UI and worker engines. Each fixed cleanup
-step reports `returned`, `failed`, or `not_present`. No exception text, device
-address or notification content is retained. `returned` confirms only that the
-API call returned, not a physical disconnection or a healthy tracker session.
-Passive device-event monitor teardown is outside the trace scope. History is
-memory-only and resets when the app process exits; copy it before force-stopping.
+**Rules → Keywords** gives messages containing chosen words, phrases or emoji
+their own vibration, or keeps them silent. Words match whole words, ignoring case
+and umlauts; a trailing `*` matches word forms (`call*` matches "calling"); emoji
+match anywhere. If several rules match, the top one wins; drag to reorder. Up to
+20 rules of up to 20 keywords each (40 characters) are stored with the relay
+rules. Adding the first keyword asks for consent, because message text is then
+checked on the phone, in memory, and discarded. History records only the
+category `keyword`; reports carry only the rule count. Stable keys include
+`keyword-rules`, `add-keyword-rule`, `keyword-rule-<index>`, `keyword-input`,
+`keyword-preset-<id>`, `save-keyword-rule`, `delete-keyword-rule` and
+`keyword-consent-confirm`.
 
-1. With relay off, verify Google Health can sync.
-2. Start relay, send one allowed notification and verify vibration.
-3. Stop relay, wait until it says off, then try Health sync again.
-4. If sync fails, return to the demo and copy the debug report before changing
-   Bluetooth or force-stopping. Note whether sync also failed while relay was on.
-5. Force-stop the demo in Android Settings and retry Health sync. If still stuck,
-   toggle Bluetooth off/on and retry. Report which step restored sync.
-
-A quiet relay should not intentionally retain its command GATT client for 15
-minutes. Failed teardown is one hypothesis; shared Bluetooth or tracker protocol
-state is another. These diagnostics do not automatically reset Bluetooth or the
-tracker, and are not a confirmed fix for Health sync failures.
-
-Dev.4 serializes command GATT callbacks on the main lifecycle thread and checks
-session identity after queueing, including native outgoing packets, DTLS-ready
-notifications and operation completions. Cleanup invalidates session identity
-before disposing native resources. Partially constructed sinks and endpoints
-are registered for cleanup before subsequent initialization can throw. Regression
-tests exercise callbacks arriving during setup, after cleanup and after a new
-session replaces the old one. These address code-level races, not a confirmed
-explanation or fix for Google Health error 3000. Test both idle relay-on sync and
-sync after stopping; a vibration still opens a separate secure tracker session
-which can contend with Health during the operation.
-
-### Root cause and fix (dev.5)
-
-Logcat from both apps on the paired phone established the cause. The Air
-exposes a single Gattlink/DTLS channel (`ABBAFF01`/`ABBAFF02`) and every GATT
-client on the shared BLE link receives its notifications. When the SDK opens
-its session, the Air resets that channel and its DTLS handshake; Google Health
-logs `unexpected reset complete`, foreign packet sequence numbers, and its own
-`resetting DTLS`. Our handshake completes; Google Health's does not. After the
-SDK disconnects, Google Health logs `Data Ack Timeout` and `max resend count
-reached` until its watchdog disconnects and reconnects about 60 s later. Any
-sync in that window fails, and repeated relay vibrations extend the outage.
-
-The Air retries a failed handshake by resetting the link for all clients and
-offering its other identity (normal mobile key ↔ bootstrap key). Dev.5 uses
-this: after each DTLS operation, the plugin starts a short handoff session
-whose key resolver refuses every identity. When the Air resets the link
-(`GattlinkSessionResent`), the plugin stops transmitting before replying and
-closes. Google Health resynchronizes and handshakes alone, without a
-disconnect. If no reset arrives within 10 s, the plugin closes as before.
-
-Each command's entry in the debug report's `transport.cleanupHistory` now
-includes `channelHandoff`: `reset_observed` (handed back), `deadline` (the Air
-did not reset; Google Health may again need its ~60 s reconnect), `link_lost`,
-`failed` or `interrupted`. Operations without a DTLS session omit it. The
-handoff depends on observed Air firmware behavior, not a documented contract.
-On other phones or firmware, a report with `deadline` or `failed` is the
-signal that it does not apply there; the command result is unaffected.
-
-Measured on 2026-10-16 (Pixel 7 Pro, Android 17, Google Health 5.10.1):
-without the handoff, Google Health was out of sync for 57–61 s after each
-vibration. With it, Google Health restarted DTLS at the handoff and logged
-no ack timeouts or watchdog disconnects in five vibrations: four from the UI
-engine (three with Google Health in the foreground polling the Air) and one
-from the running relay worker. Google Health sometimes performs one more
-DTLS restart 5–20 s later without errors; its cause is not established. During the
-command itself (about 5–15 s) the two apps still compete for the channel;
-that window is inherent to a second session on the same tracker channel.
-
-### Burst merging (dev.6)
-
-Each relay command still competes with Google Health while it runs. The relay
-service therefore merges bursts: the first alert dispatches immediately;
-alerts arriving while a command runs, or within 20 s after it finishes, are
-recorded as `merged` and represented by one follow-up command sent when that
-cooldown ends. Five messages in quick succession produce two vibrations, not
-five. The follow-up's latency is measured from its earliest merged alert and
-it gets a fresh 30 s expiry. Stopping the relay cancels a waiting follow-up
-(`cancelled`). The wake lock and the per-command watchdog are held while a
-follow-up waits; the watchdog is re-armed on each dispatch so a long chat
-does not trip it. The decision logic is the Android-free `RelayCoalescer`,
-covered by unit tests. On a Pixel 7 Pro, two test vibrations 1.5 s apart ran
-as one immediate session and one follow-up 20 s later, each with
-`channelHandoff: reset_observed`.
-
-### Measured cooldown, link speed and handshake races (dev.7)
-
-Manual Google Health syncs pressed relative to the handoff, on a Pixel 7 Pro
-(spaced 2.5 min apart so Google Health would not throttle them):
-
-| Sync pressed | Result |
-|---|---|
-| No vibration | Completed in ~10 s |
-| 4.5 s / 3.9 s before handoff (during the command) | Failed once; once completed after 17.5 s |
-| 4.1 s after handoff | Completed in 8.4 s |
-| 10.5–17 s after handoff | Completed in 5–11 s |
-
-Google Health needs no recovery time after the handoff. The cooldown protects
-a sync that has started from being interrupted by the next session; 15 s
-covers the longest measured sync. A follow-up therefore starts at most about
-20 s after its oldest merged alert in normal operation, and keeps a fresh 30 s
-expiry. In the worst case (a hung command plus the 10 s handoff deadline) a
-follow-up can run up to about 100 s after the oldest alert, or not at all.
-
-Commands now request high connection priority for their own session and
-restore low power afterwards (the Air or Google Health later choose their own
-parameters). Ten consecutive commands took 4.0–4.8 s, down from 8.7 s, with
-`channelHandoff: reset_observed` and no Google Health ack timeouts.
-
-About one command in 15 lost a handshake race: after the Air resets its link,
-Google Health and the SDK both answer the handshake and both stall. Before
-dev.7 this produced no vibration and left Google Health stuck until the 45 s
-timeout. A handshake missing after 6 s now gets one fresh attempt before
-failing with `HANDSHAKE_TIMEOUT`. A test build that abandoned every first
-attempt recovered in 4 of 4 runs without Google Health ack timeouts.
-
-### Pulse style (dev.8)
-
-The relay panel offers **One pulse** (default; `tap()`, one pulse at the
-wearer's strength, which is kept) or **Two pulses** (`vibrate()`, original
-strength restored and verified). See
-[research](research.md#single-tap-investigation-2026-10-17) for how a single
-pulse keeps the strength. The choice is stored in app-private preferences and
-can only be changed while the relay is stopped; an explicit earlier choice of
-Two pulses is kept on upgrade. One-pulse commands are also shorter (about 1.3 s
-from session to handoff instead of about 2.5 s). The Device tab has **Single
-tap (keeps strength)** alongside the older alternating **Single pulse**. Four
-production taps (two from the Device tab, two through the relay worker) were
-felt as single pulses at the wearer's strength, each with
-`channelHandoff: reset_observed`.
-
-## Guided setup and readiness (0.1.4-dev.4)
-
-Setup opens full screen on first launch, resumes the saved step after closing,
-and stays out of the way once completed. Review it from **Device > Permissions
-& setup**. Completion and resume position stay local and are excluded from backup.
-
-The four steps are Connect, Permissions, Apps and Test. Permissions explicitly
-handles two Android grants: reading notifications and showing Air Relay's own
-notifications (pause/stop controls). Each request is the bottom primary action.
-If app notifications are denied, the user can open settings or explicitly skip.
-Starting the relay does not request that permission again. Skipped controls have
-an Allow action on Home. Notification access is explained before requesting it.
-
-The test is optional. A verified command is distinct from the wearer confirming
-that they felt it. Setup never starts notifications automatically.
-
-Home has a single status, a primary control, app rules and three recent events.
-Start/Stop keeps the heading at the previous state while the button shows
-progress. On appears only when the native worker is ready; Off follows native
-shutdown. Fast operations skip the brief busy flash. Start uses the teal accent,
-Stop uses a neutral fill, and reduced motion disables the color animation.
-Latency, error explanations and sanitized exports are behind activity details.
-Readiness does not imply a permanent Bluetooth connection or live wrist detection.
+**Rules → Message tone** is the experimental automatic classifier (urgent,
+negative, everything else), with its own consent. Order: apps that are off,
+unsaved chats in restricted apps, muted chats and silence never buzz; then a
+matching keyword decides, then message tone, then the chat, app and default
+vibration. A keyword cannot unmute a muted chat.
 
 ## Custom notification rules (0.1.4 development)
 
 Everyday navigation is **Home**, **Rules**, **Device**. Home owns Start/Stop,
 Try it and timed pause. Rules owns app selection, default and app-specific
-vibrations, WhatsApp chat overrides and a daily quiet-hours window. Device
+vibrations, chat overrides and a daily quiet-hours window. Device
 retains device controls and opens **Developer tools** (Lab). Lab has a normal
 back action to Device; entering it never stops the relay. Device experiments
 still require the existing explicit relay-stop handoff.
 
 App rows keep their positions while you toggle notifications. Tap **Selected first**
-to regroup them, or reopen Rules. Status refreshes reuse the existing app icons.
+to regroup them, or reopen Apps. Status refreshes reuse the existing app icons.
 
 The four presets are `single` (current strength), `low`, `high`, and `double`
 (two-pulse preview with restoration). Explicit low/high persists that strength

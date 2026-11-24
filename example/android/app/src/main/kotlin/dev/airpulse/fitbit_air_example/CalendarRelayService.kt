@@ -41,6 +41,9 @@ class CalendarRelayService : Service() {
     /** Read by the listener so message text is only inspected after the user opts in. */
     var toneEnabled = false
         private set
+    /** Keyword rules the listener checks message text against; empty unless the user adds one. */
+    internal var keywordRules: List<RelayKeywordRule> = emptyList()
+        private set
     private var pulseStyle = "single"
     private val previewReplies = mutableMapOf<String, (RelayWorkerResult) -> Unit>()
     private val choices = mutableMapOf<String, RelayBurstChoice>()
@@ -61,6 +64,7 @@ class CalendarRelayService : Service() {
         val config = RelayRuleStore.read(this)
         val packages = config.selectedPackages
         toneEnabled = config.tone.enabled
+        keywordRules = config.keywords
         if (toneEnabled) RelayToneLexicons.preload(this)
         if (packages != selectedPackages) {
             selectedPackages = packages
@@ -133,7 +137,7 @@ class CalendarRelayService : Service() {
         // Null after Android restarted the sticky service in a new process.
         resumeReason = intent?.getStringExtra(RESUME_REASON) ?: if (intent == null) "process" else null
         selectedPackages = RelayRuleStore.read(this).selectedPackages
-        toneEnabled = RelayRuleStore.read(this).tone.enabled
+        RelayRuleStore.read(this).let { toneEnabled = it.tone.enabled; keywordRules = it.keywords }
         if (toneEnabled) RelayToneLexicons.preload(this)
         pulseStyle = RelayAppSelection.pulseStyle(this)
         if (selectedPackages.isEmpty()) {
@@ -239,16 +243,18 @@ class CalendarRelayService : Service() {
     private fun phoneAwake(silence: RelaySilence): Boolean =
         silence.onlyWhileAsleep && getSystemService(PowerManager::class.java).isInteractive
 
-    internal fun onAlert(packageName: String, key: String, postedAt: Long, ongoing: Boolean, summary: Boolean, messageTimestamp: Long?, conversationIds: Set<String>, tone: RelayTone? = null) {
+    internal fun onAlert(packageName: String, key: String, postedAt: Long, ongoing: Boolean, summary: Boolean, messageTimestamp: Long?, conversationIds: Set<String>, tone: RelayTone? = null, keyword: RelayKeywordRule? = null) {
         if (!ready || stopping) return
         val now = System.currentTimeMillis()
         if (filter?.accept(packageName, key, postedAt, now, ongoing, summary, messageTimestamp) != true) return
         val config = RelayRuleStore.read(this)
-        val match = config.match(packageName, conversationIds, tone)
-        val category = tone?.takeIf { config.tone.enabled }
-        if (match == null) { record(nextId(), packageName, postedAt, "filtered", tone = category); return }
+        // The listener matched against the rules it saw; only keep a rule that still exists.
+        val rule = keyword?.takeIf { it in config.keywords }
+        val match = config.match(packageName, conversationIds, tone, rule)
+        val category = if (rule != null) RelayMatch.KEYWORD_CATEGORY else tone?.takeIf { config.tone.enabled }?.id
+        if (match == null) { record(nextId(), packageName, postedAt, "filtered", category = category); return }
         val silence = config.silence.reason(now)
-        if (silence != null) { cancelWaiting(silence); record(nextId(), packageName, postedAt, silence, tone = category); return }
+        if (silence != null) { cancelWaiting(silence); record(nextId(), packageName, postedAt, silence, category = category); return }
         if (phoneAwake(config.silence)) {
             record(nextId(), packageName, postedAt, "phone_awake", match = match)
             return
@@ -450,10 +456,10 @@ class CalendarRelayService : Service() {
     private fun nextId() = "relay-${System.currentTimeMillis()}-${++sequence}"
 
     private fun record(id: String, sbnPackage: String?, postedAt: Long, stage: String, code: String? = null,
-                       match: RelayMatch? = null, tone: RelayTone? = match?.tone) {
+                       match: RelayMatch? = null, category: String? = match?.category) {
         val now = System.currentTimeMillis()
         RelayHistory.add(this, RelayActivity(id, sbnPackage, stage, now, maxOf(0, now - postedAt), code,
-            match?.preset?.id, tone?.id))
+            match?.preset?.id, category))
     }
 
     fun requestStop(reason: String) {

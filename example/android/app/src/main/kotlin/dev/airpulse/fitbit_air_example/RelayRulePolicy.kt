@@ -22,8 +22,21 @@ internal data class SavedChat(
     val kind: String = "shortcut",
     val preset: RelayPreset? = null,
 )
-/** [tone] is the message's category when message tone is on, for history. */
-internal data class RelayMatch(val preset: RelayPreset, val specificity: Int, val tone: RelayTone? = null)
+/**
+ * [tone] is the message's category when message tone is on, and [keyword] whether a
+ * keyword rule chose the vibration; both only label history.
+ */
+internal data class RelayMatch(
+    val preset: RelayPreset,
+    val specificity: Int,
+    val tone: RelayTone? = null,
+    val keyword: Boolean = false,
+) {
+    /** History label: "keyword", a tone id, or null. */
+    val category: String? get() = if (keyword) KEYWORD_CATEGORY else tone?.id
+
+    companion object { const val KEYWORD_CATEGORY = "keyword" }
+}
 /** Per-tone presets; null keeps the app or chat rule. Off unless the user opts in. */
 internal data class RelayToneRules(
     val enabled: Boolean = false,
@@ -73,21 +86,37 @@ internal data class RelayRuleConfig(
     val chats: Map<String, SavedChat> = emptyMap(),
     val silence: RelaySilence = RelaySilence(),
     val tone: RelayToneRules = RelayToneRules(),
-    val everyoneElseSilent: Boolean = false,
+    /** Apps where only saved chats buzz; everyone else in them stays silent. */
+    val onlySavedChats: Set<String> = emptySet(),
     val calls: RelayCallRule = RelayCallRule(),
+    val keywords: List<RelayKeywordRule> = emptyList(),
 ) {
+    init { require(keywords.size <= RelayKeywordRule.MAX_RULES) }
+
+    /** The single WhatsApp switch older versions stored, for settings read by a downgrade. */
+    val everyoneElseSilent: Boolean get() = RelayConversationPolicy.whatsappPackages.any { it in onlySavedChats }
+
     val selectedPackages: Set<String> get() = apps.filterValues { it.enabled }.keys
-    fun match(packageName: String, identities: Set<String>, tone: RelayTone? = null): RelayMatch? {
+
+    /**
+     * Order: app off, unsaved chats in [onlySavedChats] apps and muted chats or apps always stay
+     * silent; then a matching [keyword] rule decides, then message [tone], then the
+     * chat, app and default vibration.
+     */
+    fun match(packageName: String, identities: Set<String>, tone: RelayTone? = null, keyword: RelayKeywordRule? = null): RelayMatch? {
         val app = apps[packageName]?.takeIf { it.enabled } ?: return null
-        val whatsapp = packageName in RelayConversationPolicy.packages
-        val saved = if (whatsapp) identities.mapNotNull { chats[it] } else emptyList()
-        // "Everyone else: Silent" lets only saved chats through.
-        if (whatsapp && everyoneElseSilent && saved.isEmpty()) return null
+        // Identities are hashed with the app, so a chat only ever matches in its own app.
+        val saved = identities.mapNotNull { id -> chats[id]?.takeIf { it.packageName == packageName } }
+        if (packageName in onlySavedChats && saved.isEmpty()) return null
         val overrides = saved.mapNotNull { it.preset }
         // A saved mute always wins if Android supplies multiple identity forms.
         if (RelayPreset.MUTE in overrides) return null
         val base = overrides.firstOrNull() ?: app.preset ?: defaultPreset
         if (base == RelayPreset.MUTE) return null
+        // A keyword is the user's explicit choice, so it outranks tone and person rules in a burst.
+        if (keyword != null) {
+            return if (keyword.preset == RelayPreset.MUTE) null else RelayMatch(keyword.preset, 2, keyword = true)
+        }
         val category = tone?.takeIf { this.tone.enabled }
         val toned = category?.let { this.tone.preset(it) }
         val preset = toned ?: base
@@ -107,6 +136,10 @@ internal data class RelayBurstChoice(
         if (other.match.specificity > match.specificity ||
             (other.match.specificity == match.specificity && other.receivedAt >= receivedAt)) other else this
 }
+
+/** "Everyone else: silent" from before chat rules covered every app applied to WhatsApp only. */
+internal fun legacyOnlySavedChats(everyoneElseSilent: Boolean): Set<String> =
+    if (everyoneElseSilent) RelayConversationPolicy.whatsappPackages else emptySet()
 
 /** Migration also fails closed after backup/transfer omitted private rule settings. */
 internal fun migrateRelayRules(packages: Set<String>, style: String, migratedBefore: Boolean): RelayRuleConfig =

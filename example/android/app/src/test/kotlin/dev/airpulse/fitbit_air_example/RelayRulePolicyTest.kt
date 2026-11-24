@@ -11,11 +11,28 @@ class RelayRulePolicyTest {
         chats = mapOf("alice" to SavedChat(whatsapp, "Alice", preset = RelayPreset.HIGH),
             "muted" to SavedChat(whatsapp, "Muted", preset = RelayPreset.MUTE), "bob" to SavedChat(whatsapp, "Bob")))
 
+    @Test fun `only saved chats works per app for any chat app`() {
+        val signal = "org.thoughtcrime.securesms"
+        val telegram = "org.telegram.messenger"
+        val rules = config.copy(
+            apps = config.apps + listOf(signal, telegram).associateWith { RelayAppRule(true) },
+            chats = config.chats + ("team" to SavedChat(signal, "Team", preset = RelayPreset.DOUBLE)),
+            onlySavedChats = setOf(signal),
+        )
+        assertNull(rules.match(signal, emptySet()))
+        assertEquals(RelayMatch(RelayPreset.DOUBLE, 1), rules.match(signal, setOf("team")))
+        // Other apps, including WhatsApp, are unaffected by Signal's setting.
+        assertEquals(RelayMatch(RelayPreset.CURRENT, 0), rules.match(telegram, emptySet()))
+        assertEquals(RelayMatch(RelayPreset.CURRENT, 0), rules.match(whatsapp, setOf("carol")))
+        // A chat saved in one app never matches in another.
+        assertEquals(RelayMatch(RelayPreset.CURRENT, 0), rules.match(telegram, setOf("team")))
+        assertNull(rules.copy(onlySavedChats = setOf(telegram)).match(telegram, setOf("team")))
+    }
     @Test fun `migration preserves selection and style but backup restore does not reenable stale apps`() {
         val migrated = migrateRelayRules(setOf("com.whatsapp"), "double", false)
         assertEquals(setOf("com.whatsapp"), migrated.selectedPackages)
         assertEquals(RelayPreset.DOUBLE, migrated.defaultPreset)
-        assertNull(migrated.copy(everyoneElseSilent = true).match("com.whatsapp", emptySet()))
+        assertNull(migrated.copy(onlySavedChats = RelayConversationPolicy.whatsappPackages).match("com.whatsapp", emptySet()))
         assertTrue(migrateRelayRules(setOf("com.whatsapp"), "double", true).selectedPackages.isEmpty())
     }
     @Test fun `chat overrides app and mute wins across identity forms`() {
@@ -25,7 +42,7 @@ class RelayRulePolicyTest {
         assertNull(config.match("unknown", emptySet()))
     }
     @Test fun `everyone else silent lets only saved chats through`() {
-        val silent = config.copy(everyoneElseSilent = true)
+        val silent = config.copy(onlySavedChats = setOf(whatsapp))
         assertNull(silent.match(whatsapp, emptySet()))
         assertNull(silent.match(whatsapp, setOf("carol")))
         assertNull(silent.copy(chats = emptyMap()).match(whatsapp, setOf("alice")))

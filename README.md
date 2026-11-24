@@ -29,8 +29,9 @@ same Android phone in the installed Google Health app.
 The [example](example/) is **Air Relay**, a complete Android app built on this
 package: it turns phone notifications into a gentle vibration on your Fitbit Air.
 
-- **Choose what buzzes:** pick apps, or specific WhatsApp chats, and give each
-  its own vibration (one pulse, two pulses, or a strength).
+- **Choose what buzzes:** pick apps, people and groups in any chat app
+  (WhatsApp, Signal, Telegram and others), or keywords and emoji, and give each
+  its own vibration (one pulse, two pulses, a strength, or silent).
 - **Stays out of the way:** bursts of messages merge into one follow-up buzz,
   quiet hours and a timed pause silence it, and Google Health keeps syncing.
 - **Shows the Air's status:** connection, battery and recent deliveries at a

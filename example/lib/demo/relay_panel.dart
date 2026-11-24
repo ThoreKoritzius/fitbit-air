@@ -530,12 +530,13 @@ class RelayPanel extends StatelessWidget {
             DateTime.fromMillisecondsSinceEpoch(millis),
           ).format(context);
     final code = entry['errorCode'] as String?;
-    // Vibration and message tone category; absent on older entries.
+    // Vibration and message tone or keyword category; absent on older entries.
     final presetId = entry['preset'] as String?;
     final tone = switch (entry['tone']) {
       'urgent' => 'Urgent',
       'negative' => 'Negative',
       'neutral' => 'Neutral',
+      'keyword' => 'Keyword',
       _ => null,
     };
     final signal = [

@@ -18,11 +18,18 @@ class RelayRuleStoreTest {
             mapOf("com.whatsapp" to RelayAppRule(true, RelayPreset.LOW), "com.calendar" to RelayAppRule(false)),
             mapOf("private-chat-hash" to SavedChat("com.whatsapp", "Chat", "name", RelayPreset.MUTE),
                 "other-hash" to SavedChat("com.whatsapp.w4b", "Shop")),
-            RelaySilence(-1, true, 540, 1020), everyoneElseSilent = true)
+            RelaySilence(-1, true, 540, 1020), onlySavedChats = setOf("com.whatsapp", "org.thoughtcrime.securesms"))
         val actual = RelayRuleStore.decode(JSONObject(RelayRuleStore.encode(expected).toString()))
         assertEquals(expected, actual)
         assertNull(actual.apps["com.calendar"]!!.preset)
         assertTrue(actual.apps["com.whatsapp"]!!.enabled)
+    }
+    @Test fun `old WhatsApp-only switch migrates and is still written for downgrades`() {
+        val legacy = RelayRuleStore.encode(RelayRuleConfig()).apply { remove("onlySavedChats"); put("everyoneElseSilent", true) }
+        assertEquals(RelayConversationPolicy.whatsappPackages, RelayRuleStore.decode(legacy).onlySavedChats)
+        val signalOnly = RelayRuleStore.encode(RelayRuleConfig(onlySavedChats = setOf("org.thoughtcrime.securesms")))
+        assertFalse(signalOnly.getBoolean("everyoneElseSilent"))
+        assertTrue(RelayRuleStore.encode(RelayRuleConfig(onlySavedChats = setOf("com.whatsapp"))).getBoolean("everyoneElseSilent"))
     }
     @Test fun `tone rules round trip and older configs decode with tone off`() {
         val expected = RelayRuleConfig(tone = RelayToneRules(true, RelayPreset.DOUBLE, null, RelayPreset.MUTE))

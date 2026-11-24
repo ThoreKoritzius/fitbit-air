@@ -26,7 +26,30 @@ class AppNotificationRule {
   final VibrationPreset? preset;
 }
 
-/// A WhatsApp chat saved on this phone. [preset] null uses the app vibration.
+/// Names for common chat apps, used until the phone's app list has loaded. Chat
+/// rules also work for apps not listed here.
+const knownChatApps = {
+  'com.whatsapp': 'WhatsApp',
+  'com.whatsapp.w4b': 'WhatsApp Business',
+  'org.thoughtcrime.securesms': 'Signal',
+  'org.telegram.messenger': 'Telegram',
+  'org.telegram.messenger.web': 'Telegram',
+  'com.facebook.orca': 'Messenger',
+  'com.google.android.apps.messaging': 'Messages',
+  'com.google.android.apps.dynamite': 'Google Chat',
+  'com.Slack': 'Slack',
+  'com.discord': 'Discord',
+  'com.microsoft.teams': 'Teams',
+  'ch.threema.app': 'Threema',
+  'com.viber.voip': 'Viber',
+  'im.vector.app': 'Element',
+  'com.instagram.android': 'Instagram',
+  'jp.naver.line.android': 'LINE',
+  'com.tencent.mm': 'WeChat',
+  'com.samsung.android.messaging': 'Samsung Messages',
+};
+
+/// A chat saved on this phone, in any chat app. [preset] null uses the app vibration.
 class SavedChat {
   const SavedChat({
     required this.id,
@@ -39,10 +62,9 @@ class SavedChat {
   final String label;
   final String packageName;
 
-  /// Matched by exact chat name because WhatsApp gave no conversation ID.
+  /// Matched by exact chat name because the app gave no conversation ID.
   final bool nameMatch;
   final VibrationPreset? preset;
-  bool get business => packageName == 'com.whatsapp.w4b';
 
   factory SavedChat.fromMap(Map map) => SavedChat(
     id: map['id'] as String,
@@ -53,12 +75,28 @@ class SavedChat {
   );
 }
 
+/// Messages containing any of [words] get [preset]; [VibrationPreset.mute] silences them.
+class KeywordRule {
+  const KeywordRule({required this.words, required this.preset});
+  final List<String> words;
+  final VibrationPreset preset;
+
+  /// Limits enforced by the phone as well.
+  static const maxRules = 20, maxWords = 20, maxWordLength = 40;
+
+  factory KeywordRule.fromMap(Map map) => KeywordRule(
+    words: [for (final word in map['words'] as List? ?? const []) '$word'],
+    preset: VibrationPreset.parse(map['preset']),
+  );
+  Map<String, Object?> toMap() => {'words': words, 'preset': preset.id};
+}
+
 class RelaySettings {
   const RelaySettings({
     this.defaultPreset = VibrationPreset.single,
     this.apps = const {},
     this.chats = const [],
-    this.everyoneElseSilent = false,
+    this.onlySavedChats = const {},
     this.pauseUntil = 0,
     this.quietEnabled = false,
     this.onlyWhileAsleep = false,
@@ -72,13 +110,14 @@ class RelaySettings {
     this.toneUrgent,
     this.toneNegative,
     this.toneNeutral,
+    this.keywordRules = const [],
   });
   final VibrationPreset defaultPreset;
   final Map<String, AppNotificationRule> apps;
   final List<SavedChat> chats;
 
-  /// Only saved WhatsApp chats may vibrate.
-  final bool everyoneElseSilent;
+  /// Apps where only saved chats buzz.
+  final Set<String> onlySavedChats;
   final int pauseUntil;
   final bool quietEnabled;
   final bool onlyWhileAsleep;
@@ -95,6 +134,12 @@ class RelaySettings {
   final VibrationPreset? toneUrgent;
   final VibrationPreset? toneNegative;
   final VibrationPreset? toneNeutral;
+
+  /// Checked in order before message tone; the first match decides.
+  final List<KeywordRule> keywordRules;
+
+  /// Whether message text is checked on the phone at all.
+  bool get readsMessageText => toneEnabled || keywordRules.isNotEmpty;
 
   factory RelaySettings.fromMap(Map map) {
     final appMap = map['apps'] as Map? ?? {};
@@ -118,7 +163,9 @@ class RelaySettings {
         for (final chat in map['chats'] as List? ?? const [])
           SavedChat.fromMap(chat as Map),
       ],
-      everyoneElseSilent: map['everyoneElseSilent'] == true,
+      onlySavedChats: {
+        for (final pkg in map['onlySavedChats'] as List? ?? const []) '$pkg',
+      },
       pauseUntil: map['pauseUntil'] as int? ?? 0,
       quietEnabled: map['quietEnabled'] == true,
       onlyWhileAsleep: map['onlyWhileAsleep'] == true,
@@ -132,6 +179,10 @@ class RelaySettings {
       toneUrgent: optional(map['toneUrgent']),
       toneNegative: optional(map['toneNegative']),
       toneNeutral: optional(map['toneNeutral']),
+      keywordRules: [
+        for (final rule in map['keywordRules'] as List? ?? const [])
+          KeywordRule.fromMap(rule as Map),
+      ],
     );
   }
 }

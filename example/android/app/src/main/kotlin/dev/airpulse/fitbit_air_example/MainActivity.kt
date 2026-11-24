@@ -125,9 +125,12 @@ class MainActivity : FlutterActivity() {
                             RelayRuleStore.update(this) { it.copy(chats = it.chats - id) }
                             result.success(null)
                         }
-                        "setEveryoneElseSilent" -> {
-                            val silent = requireNotNull(call.argument<Boolean>("silent"))
-                            RelayRuleStore.update(this) { it.copy(everyoneElseSilent = silent) }
+                        "setOnlySavedChats" -> {
+                            val pkg = requireNotNull(call.argument<String>("packageName"))
+                            val enabled = requireNotNull(call.argument<Boolean>("enabled"))
+                            RelayRuleStore.update(this) {
+                                it.copy(onlySavedChats = if (enabled) it.onlySavedChats + pkg else it.onlySavedChats - pkg)
+                            }
                             result.success(null)
                         }
                         "saveDefaultPreset" -> {
@@ -171,6 +174,15 @@ class MainActivity : FlutterActivity() {
                             fun preset(key: String) = call.argument<String>(key)?.let { RelayPreset.parse(it) }
                             val tone = RelayToneRules(enabled, preset("urgent"), preset("negative"), preset("neutral"))
                             RelayRuleStore.update(this) { it.copy(tone = tone) }
+                            result.success(null)
+                        }
+                        "saveKeywordRules" -> {
+                            val rules = requireNotNull(call.argument<List<Map<String, Any?>>>("rules")).map { rule ->
+                                @Suppress("UNCHECKED_CAST")
+                                val words = (rule["words"] as List<String>).map(String::trim).filter(String::isNotEmpty).distinct()
+                                RelayKeywordRule(words, RelayPreset.parse(rule["preset"] as String))
+                            }
+                            RelayRuleStore.update(this) { it.copy(keywords = rules) }
                             result.success(null)
                         }
                         "apps" -> Thread {

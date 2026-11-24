@@ -45,15 +45,19 @@ class CalendarNotificationListener : NotificationListenerService() {
         relay?.onCallEnded(sbn.key)
         if (callType == Notification.CallStyle.CALL_TYPE_ONGOING ||
             callType == Notification.CallStyle.CALL_TYPE_SCREENING) return
-        runCatching { RelayConversations.observe(sbn.packageName, sbn.notification, sbn.isOngoing) }
+        runCatching { RelayConversations.observe(sbn.packageName, sbn.notification, sbn.isOngoing, appLabel(sbn.packageName)) }
             .onFailure { RelayConversations.captureError() }
         if (relay == null) return
         if (!relay.acceptsPackage(sbn.packageName)) return
-        // Opt-in: the text stays local to this call; only the tone reaches the relay.
+        // Opt-in: the text stays local to this call; only the tone and matched rule reach the relay.
+        val keywordRules = relay.keywordRules
+        val text = if (!relay.toneEnabled && keywordRules.isEmpty()) null
+            else runCatching { latestMessageText(sbn.notification)?.toString() }.getOrNull()
+        val keyword = runCatching { RelayKeywordMatcher.firstMatch(keywordRules, text)?.let(keywordRules::get) }.getOrNull()
         val tone = if (!relay.toneEnabled) null else runCatching {
             val ranking = NotificationListenerService.Ranking()
                 .takeIf { currentRanking?.getRanking(sbn.key, it) == true }
-            RelayToneClassifier.classify(latestMessageText(sbn.notification)?.toString(),
+            RelayToneClassifier.classify(text,
                 RelayNotificationSignals.from(sbn.notification, ranking, System.currentTimeMillis()),
                 RelayToneLexicons.shared(this))
         }.getOrNull()
@@ -61,8 +65,19 @@ class CalendarNotificationListener : NotificationListenerService() {
             sbn.packageName, sbn.key, sbn.postTime, sbn.isOngoing,
             sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0,
             latestMessageTimestamp(sbn.notification),
-            RelayConversations.identities(sbn.packageName, sbn.notification), tone
+            RelayConversations.identities(sbn.packageName, sbn.notification, appLabel(sbn.packageName)), tone, keyword
         )
+    }
+
+    private val labels = mutableMapOf<String, String?>()
+
+    /** The app's display name, so a notification titled just "Signal" is never taken for a chat. */
+    fun appLabel(packageName: String): String? = synchronized(labels) {
+        labels.getOrPut(packageName) {
+            runCatching {
+                packageManager.getApplicationLabel(packageManager.getApplicationInfo(packageName, 0)).toString()
+            }.getOrNull()
+        }
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
@@ -97,9 +112,10 @@ class CalendarNotificationListener : NotificationListenerService() {
 
         fun captureExisting() {
             runCatching {
-                instance?.activeNotifications?.filter { it.packageName in RelayConversationPolicy.packages }
-                    ?.take(128)?.forEach { sbn ->
-                        runCatching { RelayConversations.observe(sbn.packageName, sbn.notification, sbn.isOngoing, existing = true) }
+                val listener = instance ?: return
+                listener.activeNotifications?.take(128)?.forEach { sbn ->
+                        runCatching { RelayConversations.observe(sbn.packageName, sbn.notification, sbn.isOngoing,
+                            listener.appLabel(sbn.packageName), existing = true) }
                             .onFailure { RelayConversations.captureError() }
                     }
             }.onFailure { RelayConversations.captureError() }
