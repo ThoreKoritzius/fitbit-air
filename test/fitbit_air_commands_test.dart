@@ -386,6 +386,50 @@ void main() {
     });
   });
 
+  test(
+    'an unanswered read before any change is retried like a raced session',
+    () {
+      fakeAsync((time) {
+        var attempt = 0;
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          calls.add(call.method);
+          if (attempt++ == 0) {
+            throw PlatformException(code: 'AIR_NO_REPLY', message: 'No reply.');
+          }
+          return success;
+        });
+        final dispatcher = AirHapticDispatcher();
+        AirHapticDispatchResult? result;
+        dispatcher.submit(command('quiet-air')).then((r) => result = r);
+        time.elapse(const Duration(seconds: 3));
+        expect(result?.status, AirHapticDispatchStatus.completed);
+        expect(result?.attempts, 2);
+        dispatcher.close();
+      });
+    },
+  );
+
+  test(
+    'an unconfirmed change is never retried: the pulse may have happened',
+    () {
+      fakeAsync((time) {
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          calls.add(call.method);
+          throw PlatformException(code: 'HAPTIC_UNCONFIRMED', message: 'Lost.');
+        });
+        final dispatcher = AirHapticDispatcher();
+        AirHapticDispatchResult? result;
+        dispatcher.submit(command('maybe-buzzed')).then((r) => result = r);
+        time.elapse(const Duration(seconds: 10));
+        expect(result?.status, AirHapticDispatchStatus.failed);
+        expect(result?.error?.code, 'HAPTIC_UNCONFIRMED');
+        expect(result?.attempts, 1);
+        expect(calls.length, 1);
+        dispatcher.close();
+      });
+    },
+  );
+
   test('a second unsent failure is reported, not retried again', () {
     fakeAsync((time) {
       messenger.setMockMethodCallHandler(channel, (call) async {

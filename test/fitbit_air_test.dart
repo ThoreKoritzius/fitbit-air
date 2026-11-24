@@ -154,6 +154,13 @@ void main() {
 
   test('classifies errors by what the user can do', () {
     expect(AirFailureKind.of('HANDSHAKE_TIMEOUT'), AirFailureKind.temporary);
+    // Silence from the Air is temporary; only an unexpected answer is not.
+    expect(AirFailureKind.of('AIR_NO_REPLY'), AirFailureKind.temporary);
+    expect(AirFailureKind.of('HAPTIC_UNCONFIRMED'), AirFailureKind.temporary);
+    expect(
+      AirFailureKind.of('HAPTIC_TAP_FAILED'),
+      AirFailureKind.compatibility,
+    );
     expect(AirFailureKind.of('AIR_NOT_FOUND'), AirFailureKind.setup);
     expect(
       const FitbitAirException('NATIVE_UNAVAILABLE', '').kind,

@@ -107,7 +107,8 @@ class AirHapticDispatchResult {
 /// Reuse one dispatcher. Accepted IDs are remembered even after failure: a lost
 /// response can mean a command physically ran, so such failures are never
 /// retried. The one exception is [retryUnsent]: a failure raised before any
-/// command can reach the Air (`HANDSHAKE_TIMEOUT`) is retried once.
+/// command can reach the Air (`HANDSHAKE_TIMEOUT`, `AIR_NO_REPLY`) is retried
+/// once. `HAPTIC_UNCONFIRMED` is never retried: the pulse may have happened.
 /// Host apps must persist deduplication across restarts and coordinate separate
 /// isolates/processes. The Android transport additionally rejects simultaneous
 /// operations across Flutter engines in the same process with BUSY.
@@ -135,12 +136,13 @@ class AirHapticDispatcher {
 
   /// Retry once, after [retryDelay], when the failure guarantees nothing
   /// reached the Air: the secure session needed for any command never
-  /// started, usually because Google Health was handshaking at the same time.
+  /// started, usually because Google Health was handshaking at the same time,
+  /// or the Air did not answer the read that comes before any change.
   final bool retryUnsent;
   final Duration retryDelay;
 
   /// Errors raised before any device command can have been sent.
-  static const unsentErrorCodes = {'HANDSHAKE_TIMEOUT'};
+  static const unsentErrorCodes = {'HANDSHAKE_TIMEOUT', 'AIR_NO_REPLY'};
   final _queue = Queue<_PendingCommand>();
   final _seen = <String, DateTime>{};
   final _pendingIds = <String>{};
