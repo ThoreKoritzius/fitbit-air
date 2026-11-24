@@ -80,11 +80,45 @@ Future<void> airCalendarRelay() async {
   const channel = MethodChannel('fitbit_air_example/calendar_worker');
   final dispatcher = AirHapticDispatcher();
   final operations = RelayOperationQueue();
+  // Set by stopRing; a ring still waiting in the queue then never starts.
+  var ringStopped = false;
   channel.setMethodCallHandler((call) async {
     if (call.method == 'close') {
       dispatcher.close();
+      ringStopped = true;
+      unawaited(FitbitAir.stopRing().catchError((Object _) {}));
       unawaited(FitbitAir.keepLinkWarm(false).catchError((Object _) {}));
       return null;
+    }
+    if (call.method == 'stopRing') {
+      // Not queued: it has to reach a ring that is running right now.
+      ringStopped = true;
+      await FitbitAir.stopRing().catchError((Object _) {});
+      return null;
+    }
+    if (call.method == 'ring') {
+      ringStopped = false;
+      final args = Map<String, Object?>.from(call.arguments as Map);
+      try {
+        final result = await operations.run(() async {
+          if (ringStopped) return null;
+          return FitbitAir.ring(
+            intensity: args['intensity'] == null
+                ? null
+                : HapticIntensity.fromWireValue(args['intensity'] as int),
+            gap: Duration(milliseconds: args['gapMillis'] as int? ?? 800),
+            maximum: Duration(milliseconds: args['maxMillis'] as int? ?? 45000),
+          );
+        });
+        // The call ended before the ring could start: nothing was sent.
+        if (result == null) return {'status': 'expired'};
+        return {
+          'status': result.pulses > 0 ? 'completed' : 'expired',
+          'pulses': result.pulses,
+        };
+      } on FitbitAirException catch (error) {
+        return {'status': 'failed', 'errorCode': error.code};
+      }
     }
     if (const {
       'readBattery',

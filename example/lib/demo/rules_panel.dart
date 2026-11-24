@@ -4,6 +4,7 @@ import 'chats_page.dart';
 import 'demo_controller.dart';
 import 'keywords_page.dart';
 import 'message_tone_page.dart';
+import 'relay_settings.dart';
 import 'settings_section.dart';
 import 'vibration_editor.dart';
 
@@ -72,9 +73,7 @@ class RulesPanel extends StatelessWidget {
                 leading: const Icon(Icons.phone_in_talk_outlined),
                 title: const Text('Incoming calls'),
                 subtitle: Text(
-                  settings.callAlertsEnabled
-                      ? '${settings.callPreset.label} · From your apps'
-                      : 'Off',
+                  settings.callAlertsEnabled ? callModeLabel(settings) : 'Off',
                 ),
                 trailing: Switch(
                   key: const ValueKey('incoming-calls'),
@@ -87,14 +86,7 @@ class RulesPanel extends StatelessWidget {
                 onTap: busy
                     ? null
                     : settings.callAlertsEnabled
-                    ? () => editVibration(
-                        context,
-                        state,
-                        title: 'Incoming calls',
-                        initial: settings.callPreset,
-                        allowDefault: false,
-                        onSave: (preset) => state.saveCallPreset(preset!),
-                      )
+                    ? () => _editCallMode(context, state)
                     : () => perform(() => state.setCallAlertsEnabled(true)),
               ),
           ],
@@ -148,7 +140,9 @@ class RulesPanel extends StatelessWidget {
               key: const ValueKey('only-while-asleep'),
               secondary: const Icon(Icons.screen_lock_portrait),
               title: const Text('Only when the screen is off'),
-              subtitle: const Text('Stay quiet while you’re using the phone.'),
+              subtitle: const Text(
+                'Stay quiet for notifications while you’re using the phone. Calls still buzz.',
+              ),
               value: settings.onlyWhileAsleep,
               onChanged: busy
                   ? null
@@ -185,6 +179,73 @@ class RulesPanel extends StatelessWidget {
       ],
     );
   }
+}
+
+/// How an incoming call buzzes: a ring by default, or one of the vibrations once.
+String callModeLabel(RelaySettings settings) => settings.callRing
+    ? 'Rings until you answer'
+    : '${settings.callPreset.label} · Once per call';
+
+Future<void> _editCallMode(BuildContext context, DemoController state) async {
+  final settings = state.settings;
+  // null stands for ringing.
+  final current = settings.callRing ? null : settings.callPreset;
+  final chosen = await showModalBottomSheet<({VibrationPreset? preset})>(
+    context: context,
+    useSafeArea: true,
+    isScrollControlled: true,
+    builder: (context) => SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(
+                'Incoming calls',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            ),
+            RadioGroup<VibrationPreset?>(
+              groupValue: current,
+              onChanged: (value) => Navigator.pop(context, (preset: value)),
+              child: Column(
+                children: [
+                  const RadioListTile<VibrationPreset?>(
+                    key: ValueKey('call-mode-ring'),
+                    value: null,
+                    title: Text('Ring until you answer'),
+                    subtitle: Text(
+                      'About one pulse a second while the call rings',
+                    ),
+                  ),
+                  for (final preset in VibrationPreset.values.where(
+                    (p) => p != VibrationPreset.mute,
+                  ))
+                    RadioListTile<VibrationPreset?>(
+                      key: ValueKey('call-mode-${preset.id}'),
+                      value: preset,
+                      title: Text(preset.label),
+                      subtitle: const Text('Once per call'),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+  if (chosen == null || chosen.preset == current || !context.mounted) return;
+  final preset = chosen.preset;
+  await attemptSave(
+    context,
+    () => preset == null
+        ? state.saveCallPreset(settings.callPreset, ring: true)
+        : state.saveCallPreset(preset),
+  );
 }
 
 void _open(BuildContext context, Widget page) =>

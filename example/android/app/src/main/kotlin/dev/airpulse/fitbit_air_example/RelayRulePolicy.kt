@@ -73,7 +73,10 @@ internal data class RelaySilence(
 
 internal data class RelayCallRule(
     val enabled: Boolean = false,
-    val preset: RelayPreset = RelayPreset.DOUBLE,
+    /** The one-time vibration when [ring] is off. */
+    val preset: RelayPreset = RelayPreset.CURRENT,
+    /** Pulse about once a second until the call stops ringing (the default). */
+    val ring: Boolean = true,
 ) {
     init { require(preset != RelayPreset.MUTE) }
 

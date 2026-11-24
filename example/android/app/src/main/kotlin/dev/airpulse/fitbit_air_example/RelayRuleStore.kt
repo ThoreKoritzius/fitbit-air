@@ -69,7 +69,9 @@ internal object RelayRuleStore {
                 else -> legacyOnlySavedChats(json.getBoolean("everyoneElseSilent"))
             },
             RelayCallRule(calls?.optBoolean("enabled") ?: false,
-                calls?.optString("preset", RelayPreset.DOUBLE.id)?.let(RelayPreset::parse) ?: RelayPreset.DOUBLE),
+                calls?.optString("preset", RelayPreset.CURRENT.id)?.let(RelayPreset::parse) ?: RelayPreset.CURRENT,
+                // Saved before calls could ring: ringing is the default.
+                calls?.optBoolean("ring", true) ?: true),
             if (keywords == null) emptyList() else (0 until keywords.length()).map { i ->
                 val rule = keywords.getJSONObject(i)
                 val words = rule.getJSONArray("words")
@@ -94,7 +96,8 @@ internal object RelayRuleStore {
             .put("silence", JSONObject().put("pauseUntil", s.pauseUntil).put("quietEnabled", s.quietEnabled)
                 .put("startMinute", s.startMinute).put("endMinute", s.endMinute)
                 .put("onlyWhileAsleep", s.onlyWhileAsleep))
-        json.put("calls", JSONObject().put("enabled", config.calls.enabled).put("preset", config.calls.preset.id))
+        json.put("calls", JSONObject().put("enabled", config.calls.enabled).put("preset", config.calls.preset.id)
+            .put("ring", config.calls.ring))
         val t = config.tone
         json.put("tone", JSONObject().put("enabled", t.enabled).put("urgent", t.urgent?.id ?: JSONObject.NULL)
             .put("negative", t.negative?.id ?: JSONObject.NULL).put("neutral", t.neutral?.id ?: JSONObject.NULL))
@@ -132,7 +135,7 @@ internal object RelayRuleStore {
             "onlyWhileAsleep" to c.silence.onlyWhileAsleep,
             "silenceReason" to c.silence.reason(System.currentTimeMillis()),
             "callAlertsSupported" to (android.os.Build.VERSION.SDK_INT >= 34),
-            "callAlertsEnabled" to c.calls.enabled, "callPreset" to c.calls.preset.id,
+            "callAlertsEnabled" to c.calls.enabled, "callPreset" to c.calls.preset.id, "callRing" to c.calls.ring,
             "toneEnabled" to c.tone.enabled, "toneUrgent" to c.tone.urgent?.id,
             "toneNegative" to c.tone.negative?.id, "toneNeutral" to c.tone.neutral?.id,
             "keywordRules" to c.keywords.map { mapOf("words" to it.words, "preset" to it.preset.id) })

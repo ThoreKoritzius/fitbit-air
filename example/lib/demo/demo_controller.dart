@@ -799,8 +799,9 @@ class DemoController extends ChangeNotifier {
   Future<void> setCallAlertsEnabled(bool enabled) =>
       _relayCall('setCallAlertsEnabled', {'enabled': enabled});
 
-  Future<void> saveCallPreset(VibrationPreset preset) =>
-      _relayCall('saveCallPreset', {'preset': preset.id});
+  /// [ring] pulses until the call stops ringing; otherwise [preset] plays once.
+  Future<void> saveCallPreset(VibrationPreset preset, {bool ring = false}) =>
+      _relayCall('saveCallPreset', {'preset': preset.id, 'ring': ring});
 
   Future<void> saveToneRules({
     required bool enabled,
