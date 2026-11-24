@@ -146,6 +146,7 @@ if (result.changed) {
 | `pulse()` | 1 | Switched between low and high on every call |
 | `setHapticIntensity(…)` | 1 if the value changes, else 0 | The requested strength |
 | `getHapticIntensity()` | 0 | Unchanged (read only) |
+| `ring()` | Repeated, about one per `gap`, until `stopRing()` or `maximum` | Unchanged (restored afterward) |
 
 Every write is read back from the Air and verified. Each command takes a few
 seconds, and only one runs at a time.
