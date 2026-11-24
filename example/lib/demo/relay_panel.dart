@@ -105,7 +105,7 @@ class RelayPanel extends StatelessWidget {
       case RelayRecovery.bluetooth:
         perform(controller.openBluetoothSettings);
       case RelayRecovery.notifications:
-        _setup(context, controller, initialStep: 1);
+        _setup(context, controller, initialStep: SetupStep.notifications);
       case RelayRecovery.rules:
         openRules?.call();
       case RelayRecovery.setup:
@@ -373,7 +373,8 @@ class RelayPanel extends StatelessWidget {
             leading: const Icon(Icons.notifications_off_outlined),
             title: const Text('Relay controls are hidden'),
             trailing: TextButton(
-              onPressed: () => _setup(context, state, initialStep: 1),
+              onPressed: () =>
+                  _setup(context, state, initialStep: SetupStep.notifications),
               child: const Text('Allow'),
             ),
           ),

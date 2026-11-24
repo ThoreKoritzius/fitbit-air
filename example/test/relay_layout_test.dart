@@ -83,21 +83,29 @@ void main() {
             home: RelaySetupPage(controller: controller),
           ),
         );
-        for (var step = 0; step < 4; step++) {
-          expect(
-            find.byKey(const ValueKey('setup-next')).hitTestable(),
-            findsOneWidget,
-          );
+        // Every step keeps its main button and close in reach.
+        for (final key in [
+          'setup-get-started',
+          'setup-next',
+          'setup-next',
+          'setup-next',
+          'setup-start-relay',
+        ]) {
+          expect(find.byKey(ValueKey(key)).hitTestable(), findsOneWidget);
           expect(
             find.byKey(const ValueKey('close-setup')).hitTestable(),
             findsOneWidget,
           );
           expect(tester.takeException(), isNull);
-          if (step < 3) {
-            await tester.tap(find.byKey(const ValueKey('setup-next')));
+          if (key != 'setup-start-relay') {
+            await tester.tap(find.byKey(ValueKey(key)));
             await tester.pumpAndSettle();
           }
         }
+        expect(
+          find.byKey(const ValueKey('setup-finish-later')).hitTestable(),
+          findsOneWidget,
+        );
         await tester.pumpWidget(const SizedBox());
       },
     );
@@ -124,7 +132,10 @@ void main() {
             ).copyWith(textScaler: TextScaler.linear(1.6)),
             child: child!,
           ),
-          home: RelaySetupPage(controller: controller, initialStep: 1),
+          home: RelaySetupPage(
+            controller: controller,
+            initialStep: SetupStep.notifications,
+          ),
         ),
       );
       expect(

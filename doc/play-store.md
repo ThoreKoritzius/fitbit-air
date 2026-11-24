@@ -30,7 +30,7 @@ Data the app *accesses* but does not collect, to explain if asked:
 
 ## Prominent disclosure (User Data policy)
 
-- **What and where:** setup step 2, "Allow notifications", shows **How Air Relay uses your notifications** before Android's notification-access settings open. It says:
+- **What and where:** the setup step "Allow notifications" (after the welcome and "Connect your Air") shows, directly under its heading and before any button, **How Air Relay uses your notifications** before Android's notification-access settings open. It says:
   - what is read: notifications from all apps, including the app, title and text, also in the background;
   - why: only to decide which ones vibrate the Air;
   - that nothing is stored, uploaded or shared, and that the app has no internet access;

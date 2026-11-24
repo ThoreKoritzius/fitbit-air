@@ -28,6 +28,29 @@ windows. Manual markers remain separate from device-reported events. Neither a
 successful command nor an absence of events establishes a physical sensation or
 a negative gesture result.
 
+## Guided setup
+
+First launch opens setup; closing it never completes setup or starts the
+relay, and it resumes at the saved step (`SetupStep`: welcome, air,
+notifications, apps, ready). Reopening it after completion starts at the Air
+step.
+
+1. **Welcome** explains Air Relay in three points (`setup-get-started`).
+2. **Connect your Air** checks pairing on its own once Bluetooth access is
+   allowed and Bluetooth is on; otherwise its button asks for access or opens
+   Bluetooth settings (`setup-check-air`, then `setup-next`).
+3. **Allow notifications** shows the Play prominent disclosure
+   (`notification-disclosure`) before `notification-access-settings`, then
+   offers Air Relay's own notification (`setup-notification-controls`, or
+   `setup-skip-controls`).
+4. **Choose your apps** lists installed chat, calendar and mail apps first
+   (`setup-app-<package>`); `setup-show-all` reveals search and every app.
+5. **You're all set** offers an optional test buzz (`setup-test`, then
+   `setup-felt` or `setup-did-not-feel`) and finishes with
+   `setup-start-relay` (completes setup and starts notifications) or
+   `setup-finish-later` (completes setup only). A test is never recorded as
+   felt unless the user says so.
+
 ## Shared controller and stable controls
 
 `example/lib/demo/demo_controller.dart` exposes the same named actions used by
