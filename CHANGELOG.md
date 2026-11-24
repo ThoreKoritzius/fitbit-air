@@ -1,3 +1,31 @@
+## 0.4.0
+
+### Package
+
+- Add `FitbitAir.ring({intensity, gap, maximum, pulses})` and
+  `FitbitAir.stopRing()`, contributed by @srineere. A ring opens the secure
+  session once and pulses inside it, so pulses can be a few hundred
+  milliseconds apart instead of a new session each time. It ends on
+  `stopRing()`, `cancelOperation()`, after `maximum`, after `pulses`, or after
+  three unanswered pulses in a row (`HAPTIC_UNCONFIRMED`), and restores the
+  wearer's strength wherever a link remains. Returns `AirRingResult`.
+- `RING_FAILED` means the Air answered a ring unexpectedly
+  (`AirFailureKind.compatibility`).
+
+### Example app
+
+- **Incoming calls ring:** the Air pulses about once a second until the call
+  is answered, declined or missed (at most 45 s). The one-time vibrations
+  remain as options under Rules → Incoming calls.
+- **Phone calls now buzz at all:** they were only accepted when the Phone app
+  was selected under Apps, were not recognized on phones whose Phone app
+  omits the call type (Pixel), and were always suppressed by "Only when the
+  screen is off", because a ringing call turns the screen on. Calls now
+  ignore that setting; quiet hours and pause still apply.
+- A ring no longer stops early when the Phone app re-posts its notification
+  while still ringing.
+- Ignored calls appear in Recent activity.
+
 ## 0.3.0
 
 ### Package

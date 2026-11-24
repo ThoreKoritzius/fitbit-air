@@ -1218,7 +1218,7 @@ class DemoController extends ChangeNotifier {
   String exportJson() => const JsonEncoder.withIndent('  ').convert(report());
 
   /// Must match `version` in pubspec.yaml; a test checks this.
-  static const appVersion = '0.3.0';
+  static const appVersion = '0.4.0';
 
   static String recoveryHint(String code) => switch (code) {
     'TIMEOUT' =>
