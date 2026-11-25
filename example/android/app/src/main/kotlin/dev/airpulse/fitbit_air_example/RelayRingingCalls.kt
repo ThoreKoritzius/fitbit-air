@@ -17,6 +17,37 @@ internal class RelayRingingCalls {
     fun isRinging(ring: Ring): Boolean = active[ring.key] === ring
 }
 
+/**
+ * The shape of the last few call-like notifications and what the relay did
+ * with them, for the diagnostic report. Never the caller: only the posting
+ * app and notification metadata. In memory only.
+ */
+internal object RelayCallSignals {
+    const val MAX = 6
+    private val entries = ArrayDeque<MutableMap<String, Any?>>()
+    private val keys = ArrayDeque<String>()
+
+    @Synchronized
+    fun seen(key: String, signal: Map<String, Any?>) {
+        if (entries.size == MAX) { entries.removeFirst(); keys.removeFirst() }
+        entries.addLast(signal.toMutableMap().apply { put("outcome", if (signal["recognized"] == true) "recognized" else "not_a_ringing_call") })
+        keys.addLast(key)
+    }
+
+    /** What happened to the latest signal for [key]: "ringing", "app_not_selected", "relay_off", … */
+    @Synchronized
+    fun outcome(key: String, outcome: String) {
+        val index = keys.lastIndexOf(key)
+        if (index >= 0) entries[index]["outcome"] = outcome
+    }
+
+    @Synchronized
+    fun snapshot(): List<Map<String, Any?>> = entries.map { it.toMap() }.asReversed()
+
+    @Synchronized
+    fun clear() { entries.clear(); keys.clear() }
+}
+
 /** Which ringing calls may buzz. */
 internal object RelayCallPolicy {
     // Notification.CallStyle.CALL_TYPE_*, spelled out so older Android never needs CallStyle.

@@ -181,17 +181,26 @@ future work.
 
 ## Incoming calls
 
-On Android 14 and later, turn on **Rules → Incoming calls**, choose a call
-vibration, and enable the Phone app or calling app under **Your apps**. Leave
-the relay running. This works when the calling app posts Android’s standard
-incoming-call notification. App and device support can vary.
+Turn on **Rules → Incoming calls** and leave the relay running. By default
+the Air rings about once a second until the call is answered, declined or
+missed (at most 45 s); one-time vibrations remain as options. Calls from the
+Phone app (the default dialer, or a built-in in-call screen such as Samsung's)
+always count; calls from other apps such as WhatsApp count when that app is
+turned on under **Apps**. This works when the calling app posts Android's
+standard incoming-call notification. App and device support can vary.
 
-Air Relay queues at most one vibration per ringing notification. A ringing call takes
-priority over messages in the same queued burst. The usual cooldown still
-applies between Bluetooth commands. If a call stops ringing before dispatch,
-its vibration is skipped. Pause, quiet hours, and the phone sleep rule also
-apply. Air Relay uses its existing notification access and does not request
-the phone permission, call log, or caller number.
+A ringing call takes priority over messages in the same queued burst. If a
+call stops ringing before dispatch, its vibration is skipped. Pause and quiet
+hours apply; "Only when the screen is off" does not, because a ringing call
+turns the screen on. Air Relay uses its existing notification access and does
+not request the phone permission, call log, or caller number.
+
+When a call does not buzz, **Copy diagnostic report** (Home → Activity
+details) includes the Incoming calls settings, the phone maker, Android
+version and default Phone app, and the last few call-like notifications: the
+posting app, the notification's shape, and what the relay did with it
+(`calls_off`, `app_not_selected`, `sent_to_air`, `air_verified`, …). Never the
+caller.
 
 ## Chats
 

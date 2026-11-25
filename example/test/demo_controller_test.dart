@@ -87,6 +87,29 @@ void main() {
   );
 
   test(
+    'reports call settings and recent call signals for remote debugging',
+    () {
+      controller.phoneInfo = {'manufacturer': 'OnePlus', 'sdk': 36};
+      controller.callSignals = [
+        {
+          'package': 'com.android.incallui',
+          'recognized': true,
+          'outcome': 'calls_off',
+        },
+      ];
+      final report = jsonDecode(controller.exportJson()) as Map;
+      expect(report['phone']['manufacturer'], 'OnePlus');
+      expect(report['phone'], contains('batteryUnrestricted'));
+      expect(report['calls']['enabled'], isFalse);
+      expect(report['calls']['ring'], isTrue);
+      expect(
+        (report['calls']['recentSignals'] as List).single['outcome'],
+        'calls_off',
+      );
+    },
+  );
+
+  test(
     'bounded reports separate manual observations and omit raw payload fields',
     () async {
       controller.actions['trial'] = DemoAction(() {}, streaming: true);

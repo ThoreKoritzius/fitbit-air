@@ -13,6 +13,12 @@
   minimized channels (such as WhatsApp's background sync), notifications
   posted with `setSilent(true)`, and updates that apps mark to alert only once.
   Skipped ones appear in Recent activity as "Skipped · Silent".
+- **Incoming calls shows on Android 13 and older too:** the Rules row was
+  still hidden below Android 14.
+- **Call details in the diagnostic report:** Incoming calls settings, phone
+  maker, Android version, default Phone app, and the last few call-like
+  notifications with what the relay did with each (never the caller), so a
+  call that doesn't buzz can be diagnosed from a pasted report.
 
 ## 0.4.0
 
