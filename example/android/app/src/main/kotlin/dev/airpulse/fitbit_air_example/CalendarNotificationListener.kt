@@ -38,8 +38,9 @@ class CalendarNotificationListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val relay = CalendarRelayService.active
         val callType = callType(sbn.notification)
-        if (sbn.notification.category == Notification.CATEGORY_CALL || sbn.notification.fullScreenIntent != null) {
+        if (sbn.notification.category == Notification.CATEGORY_CALL || sbn.notification.fullScreenIntent != null) runCatching {
             // Shape only, never the caller: shows in the diagnostic report whether a call was recognized.
+            // Diagnostics only: a failure here must never keep a call from ringing.
             val n = sbn.notification
             val signal = mapOf(
                 "atMillis" to System.currentTimeMillis(), "package" to sbn.packageName,
