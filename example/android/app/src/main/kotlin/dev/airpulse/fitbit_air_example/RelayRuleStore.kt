@@ -134,7 +134,7 @@ internal object RelayRuleStore {
             "startMinute" to c.silence.startMinute, "endMinute" to c.silence.endMinute,
             "onlyWhileAsleep" to c.silence.onlyWhileAsleep,
             "silenceReason" to c.silence.reason(System.currentTimeMillis()),
-            "callAlertsSupported" to (android.os.Build.VERSION.SDK_INT >= 34),
+            "callAlertsSupported" to true, // Every version; kept for older readers.
             "callAlertsEnabled" to c.calls.enabled, "callPreset" to c.calls.preset.id, "callRing" to c.calls.ring,
             "toneEnabled" to c.tone.enabled, "toneUrgent" to c.tone.urgent?.id,
             "toneNegative" to c.tone.negative?.id, "toneNeutral" to c.tone.neutral?.id,

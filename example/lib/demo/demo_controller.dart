@@ -426,6 +426,13 @@ class DemoController extends ChangeNotifier {
   /// foreground service (OPPO, Xiaomi and others); stock Android does not.
   bool pausesOptimizedApps = false;
 
+  /// Phone maker, Android version and default Phone app, for the diagnostic report.
+  Map<String, Object?> phoneInfo = const {};
+
+  /// Recent call-like notifications (posting app and shape, never the caller)
+  /// and what the relay did with them, for the diagnostic report.
+  List<Map<String, Object?>> callSignals = const [];
+
   /// Worth suggesting unrestricted battery use: only where it matters.
   bool get suggestUnrestrictedBattery =>
       relayRunning && pausesOptimizedApps && batteryUnrestricted == false;
@@ -613,6 +620,11 @@ class DemoController extends ChangeNotifier {
           state['notificationControlsAllowed'] as bool?;
       batteryUnrestricted = state['batteryUnrestricted'] as bool?;
       pausesOptimizedApps = state['pausesOptimizedApps'] == true;
+      phoneInfo = Map<String, Object?>.from(state['phone'] as Map? ?? const {});
+      callSignals = [
+        for (final signal in state['callSignals'] as List? ?? const [])
+          Map<String, Object?>.from(signal as Map),
+      ];
       relayOutcome = state['outcome'] as String? ?? 'Relay is off.';
       final selected = state['selectedApps'] as List?;
       if (selected != null) selectedApps = selected.cast<String>().toSet();
@@ -1202,6 +1214,19 @@ class DemoController extends ChangeNotifier {
       'captureDiagnostics': captureDiagnostics,
     },
     'transport': transportDiagnostics,
+    'phone': {
+      ...phoneInfo,
+      'listenerConnected': listenerConnected,
+      'batteryUnrestricted': batteryUnrestricted,
+      'pausesOptimizedApps': pausesOptimizedApps,
+    },
+    'calls': {
+      'supported': settings.callAlertsSupported,
+      'enabled': settings.callAlertsEnabled,
+      'ring': settings.callRing,
+      'preset': settings.callPreset.id,
+      'recentSignals': callSignals,
+    },
     'settings': {
       'defaultPreset': settings.defaultPreset.id,
       'appRuleCount': settings.apps.length,

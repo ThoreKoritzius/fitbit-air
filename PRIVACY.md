@@ -44,7 +44,9 @@ Bluetooth, using the connection your phone already has with it.
 If you choose **Copy diagnostic report**, the app copies a report to your
 clipboard so you can attach it to a bug report yourself. It contains no
 message text, but does list the app packages that triggered alerts, and the
-Air's firmware version. Nothing is sent automatically.
+Air's firmware version. To help with call problems it also lists the phone's
+maker and Android version, the default Phone app, and the last few call
+notifications' app and type, never who called. Nothing is sent automatically.
 
 ## Google Play
 

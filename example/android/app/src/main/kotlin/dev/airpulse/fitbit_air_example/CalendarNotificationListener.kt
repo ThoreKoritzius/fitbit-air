@@ -38,19 +38,23 @@ class CalendarNotificationListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val relay = CalendarRelayService.active
         val callType = callType(sbn.notification)
+        if (sbn.notification.category == Notification.CATEGORY_CALL || sbn.notification.fullScreenIntent != null) {
+            // Shape only, never the caller: shows in the diagnostic report whether a call was recognized.
+            val n = sbn.notification
+            val signal = mapOf(
+                "atMillis" to System.currentTimeMillis(), "package" to sbn.packageName,
+                "category" to n.category, "declaredType" to runCatching { n.extras.getInt(RelayCallPolicy.EXTRA_CALL_TYPE) }.getOrDefault(0),
+                "fullScreen" to (n.fullScreenIntent != null), "ongoing" to (n.flags and Notification.FLAG_ONGOING_EVENT != 0),
+                "style" to n.extras.getString(Notification.EXTRA_TEMPLATE)?.substringAfterLast('$'),
+                "recognized" to (callType == RelayCallPolicy.INCOMING),
+            )
+            RelayCallSignals.seen(sbn.key, signal)
+            android.util.Log.i("AirRelay", "call-like notification: $signal")
+        }
         if (callType == RelayCallPolicy.INCOMING) {
-            // Package only: never the caller. Lets a test call show whether it was recognized.
-            android.util.Log.i("AirRelay", "incoming call from ${sbn.packageName}; relay ${if (relay == null) "off" else "on"}")
+            if (relay == null) RelayCallSignals.outcome(sbn.key, "relay_off")
             relay?.onIncomingCall(sbn.packageName, sbn.key, sbn.postTime)
             return
-        }
-        if (sbn.notification.category == Notification.CATEGORY_CALL || sbn.notification.fullScreenIntent != null) {
-            // Shape only, never the caller: which call-like notifications are not recognized as ringing.
-            val n = sbn.notification
-            android.util.Log.i("AirRelay", "call-like notification from ${sbn.packageName}: category=${n.category} type=$callType " +
-                "declared=${n.extras.getInt(RelayCallPolicy.EXTRA_CALL_TYPE)} fullScreen=${n.fullScreenIntent != null} " +
-                "ongoing=${n.flags and Notification.FLAG_ONGOING_EVENT != 0} " +
-                "style=${n.extras.getString(Notification.EXTRA_TEMPLATE)?.substringAfterLast('$')}")
         }
         // A call notification that is no longer ringing means the call was answered or ended.
         // Other notifications never end a call.

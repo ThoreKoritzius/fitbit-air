@@ -50,3 +50,28 @@ class RelayRingingCallsTest {
         assertEquals(0, RelayCallPolicy.callType(isCall = true, summary = true, declaredType = 1, fullScreen = true))
     }
 }
+
+class RelayCallSignalsTest {
+    @org.junit.Before fun reset() = RelayCallSignals.clear()
+
+    @org.junit.Test fun keepsTheLatestFewNewestFirstWithTheirOutcome() {
+        repeat(RelayCallSignals.MAX + 2) { RelayCallSignals.seen("k$it", mapOf("package" to "p$it", "recognized" to (it % 2 == 0))) }
+        RelayCallSignals.outcome("k7", "app_not_selected")
+        RelayCallSignals.outcome("k0", "ignored") // Already dropped: no effect.
+        val snapshot = RelayCallSignals.snapshot()
+        org.junit.Assert.assertEquals(RelayCallSignals.MAX, snapshot.size)
+        org.junit.Assert.assertEquals("p7", snapshot.first()["package"])
+        org.junit.Assert.assertEquals("app_not_selected", snapshot.first()["outcome"])
+        org.junit.Assert.assertEquals("recognized", snapshot[1]["outcome"])
+        org.junit.Assert.assertEquals("not_a_ringing_call", snapshot[2]["outcome"])
+    }
+
+    @org.junit.Test fun aReRingUpdatesTheNewestEntryForThatKey() {
+        RelayCallSignals.seen("call", mapOf("recognized" to true))
+        RelayCallSignals.seen("call", mapOf("recognized" to true))
+        RelayCallSignals.outcome("call", "air_verified")
+        val snapshot = RelayCallSignals.snapshot()
+        org.junit.Assert.assertEquals("air_verified", snapshot[0]["outcome"])
+        org.junit.Assert.assertEquals("recognized", snapshot[1]["outcome"])
+    }
+}

@@ -282,16 +282,17 @@ class CalendarRelayService : Service() {
     }
 
     internal fun onIncomingCall(packageName: String, key: String, postedAt: Long) {
-        if (!ready || stopping) return
+        if (!ready || stopping) { RelayCallSignals.outcome(key, "relay_not_ready"); return }
         // Re-posted while ringing (the Phone app does this): the same call goes on.
         pendingCallEnds.remove(key)?.let(handler::removeCallbacks)
-        val ring = ringingCalls.onIncoming(key) ?: return
+        val ring = ringingCalls.onIncoming(key) ?: run { RelayCallSignals.outcome(key, "still_ringing"); return }
         val now = System.currentTimeMillis()
-        if (postedAt > now || now - postedAt >= 30_000) return
+        if (postedAt > now || now - postedAt >= 30_000) { RelayCallSignals.outcome(key, "stale"); return }
         val config = RelayRuleStore.read(this)
-        val match = config.calls.match() ?: return
+        val match = config.calls.match() ?: run { RelayCallSignals.outcome(key, "calls_off"); return }
         if (!RelayCallPolicy.accepts(packageName, selectedPackages, isPhoneApp(packageName))) {
             android.util.Log.i("AirRelay", "call from $packageName ignored: app not selected")
+            RelayCallSignals.outcome(key, "app_not_selected")
             record(nextId(), packageName, postedAt, "filtered")
             return
         }
@@ -299,9 +300,11 @@ class CalendarRelayService : Service() {
         // and covers the lock screen, so the phone always looks in use. Quiet hours and pause do.
         val silence = config.silence.reason(now)
         if (silence != null) {
+            RelayCallSignals.outcome(key, silence)
             record(nextId(), packageName, postedAt, silence, match = match)
             return
         }
+        RelayCallSignals.outcome(key, "sent_to_air")
         submit(packageName, postedAt, match, ringingCall = ring)
     }
 
@@ -452,6 +455,7 @@ class CalendarRelayService : Service() {
             choices.remove(id)
             inFlight.remove(id)
             record(id, sbnPackage, postedAt, result.stage, result.errorCode, match)
+            ringingCall?.let { RelayCallSignals.outcome(it.key, "air_${result.stage}${result.errorCode?.let { c -> ":$c" } ?: ""}") }
             saveOutcome("Haptic ${result.stage}${result.errorCode?.let { ": $it" } ?: ""}.")
             val now = System.currentTimeMillis()
             coalescer.onFinished(now)?.let { if (!stopping) handler.postDelayed(followUp, maxOf(0, it - now)) }
@@ -644,6 +648,12 @@ class CalendarRelayService : Service() {
                 context.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(context.packageName)
             }.getOrNull(),
             "pausesOptimizedApps" to RelayBatteryPolicy.pausesOptimizedApps(Build.MANUFACTURER, Build.BRAND),
+            // For the diagnostic report: why a call did or did not buzz on this phone.
+            "phone" to mapOf(
+                "manufacturer" to Build.MANUFACTURER, "sdk" to Build.VERSION.SDK_INT,
+                "defaultDialer" to runCatching { context.getSystemService(android.telecom.TelecomManager::class.java).defaultDialerPackage }.getOrNull(),
+            ),
+            "callSignals" to RelayCallSignals.snapshot(),
         )
     }
 }
