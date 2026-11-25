@@ -423,6 +423,12 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
             "probeReadOnlyResources" -> withBluetoothPermission(result) {
                 startOperation(result, Operation.ProbeReadOnlyResources)
             }
+            "probeSettings" -> withBluetoothPermission(result) {
+                startOperation(result, Operation.ProbeSettings)
+            }
+            "toggleSecondSetting" -> withBluetoothPermission(result) {
+                startOperation(result, Operation.ToggleSecondSetting)
+            }
             "setHapticIntensity" -> {
                 val intensity = call.argument<Int>("intensity")
                 if (intensity !in setOf(2, 3)) {
@@ -593,6 +599,8 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
             Operation.ReadBattery -> "ReadBattery"
             Operation.ReadSignalStrength -> "ReadSignalStrength"
             Operation.ProbeReadOnlyResources -> "ProbeReadOnlyResources"
+            Operation.ProbeSettings -> "ProbeSettings"
+            Operation.ToggleSecondSetting -> "ToggleSecondSetting"
             Operation.CaptureSecureEvents -> "CaptureSecureEvents"
             is Operation.SetHapticIntensity -> "SetHapticIntensity"
             Operation.SinglePulse -> "SinglePulse"
@@ -1171,6 +1179,15 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
             Operation.ProbeBatteryAccess -> runBatteryAccessProbe(coap)
             Operation.ReadBattery -> runReadBattery(coap)
             Operation.ReadSignalStrength -> finishSessionError(coap, "INTERNAL", "Signal strength does not use DTLS.")
+            Operation.ToggleSecondSetting -> disposables.add(AirSettingsProbe.toggleSecond(coap)
+                .subscribe({ finishSessionSuccess(coap, it) }, {
+                    finishSessionError(coap, "SETTING_TOGGLE_FAILED",
+                        it.message ?: "Could not change that setting.")
+                }))
+            Operation.ProbeSettings -> disposables.add(AirSettingsProbe.probe(coap)
+                .subscribe({ finishSessionSuccess(coap, it) }, {
+                    finishSessionError(coap, "SETTINGS_PROBE_FAILED", "Settings probe failed.")
+                }))
             Operation.ProbeReadOnlyResources -> disposables.add(AirReadOnlyResources.probe(coap)
                 .subscribe({ finishSessionSuccess(coap, it) }, {
                     finishSessionError(coap, "RESOURCE_PROBE_FAILED", "Read-only resource probe failed.")
@@ -1819,6 +1836,10 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
         data object ReadBattery : Operation
         data object ReadSignalStrength : Operation
         data object ProbeReadOnlyResources : Operation
+        /** Enumerates `/settings` selectors; see [AirSettingsProbe]. */
+        data object ProbeSettings : Operation
+        /** Turns setting 2 on briefly and puts it back; see [AirSettingsProbe]. */
+        data object ToggleSecondSetting : Operation
         data object CaptureSecureEvents : Operation
         data class SetHapticIntensity(val intensity: Int) : Operation
         data object SinglePulse : Operation
