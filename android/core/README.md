@@ -1,12 +1,17 @@
-# fitbit_air core (Android, no Flutter)
+# fitbit_air core: the Fitbit Air for Android apps, without Flutter
 
-The Fitbit Air logic of the `fitbit_air` plugin as a plain Android library:
-haptics with read-back verification, device reads, the warm link, and the
-research streams. The Flutter plugin is a thin adapter over it
-(`../src/main/kotlin/.../FitbitAirPlugin.kt`), so both get every fix.
+The Fitbit Air logic of the `fitbit_air` plugin as a plain Android library,
+with the same operations, results and error codes as the Dart package:
+haptics with read-back verification, rings, device reads, the warm link, and
+the notification command queue. The Flutter plugin is a thin adapter over the
+same code (`../src/main/kotlin/.../FitbitAirPlugin.kt`), so both get every fix.
 
-Not published as an artifact yet. To try it in an Android app, include this
-directory as a Gradle module:
+Requirements: Android 7 (API 24) or newer, and a Fitbit Air paired in Google
+Health on the same phone. No internet permission is needed.
+
+## Add it
+
+Not published as an artifact yet. Include this directory as a Gradle module:
 
 ```kotlin
 // settings.gradle.kts
@@ -20,29 +25,55 @@ dependencies { implementation(project(":fitbit_air_core")) }
 ## Use
 
 ```kotlin
-val air = FitbitAirClient(context)
+val air = FitbitAir(context)
 
-// Ask for FitbitAirClient.requiredPermissions() first; the client never asks.
-air.keepLinkWarm(true, object : AirReply {
-    override fun success(value: Any?) {}
-    override fun error(code: String, message: String) {}
-})
+// The library never asks for permissions; request these first.
+requestPermissions(FitbitAir.requiredPermissions(), REQUEST_CODE)
 
-air.tap(null, object : AirReply {   // null: the wearer's own strength
-    override fun success(value: Any?) { /* verified: see the map's fields */ }
-    override fun error(code: String, message: String) { /* e.g. BUSY, HAPTIC_UNCONFIRMED */ }
-})
+air.keepLinkWarm(true)                       // faster commands; off by default
+
+air.tap { result ->                          // the wearer's own strength
+    result.onSuccess { tap -> /* tap.verified */ }
+          .onFailure { error -> (error as FitbitAirException).kind }
+}
+
+val connection = air.watchConnection { event -> /* event.connected */ }
+connection.cancel()
 
 air.close()
 ```
 
-- Call it on the main thread; replies and events arrive there.
-- One operation at a time; others get `BUSY`. Error codes match the Dart
-  `FitbitAirException` codes (see `lib/fitbit_air.dart`).
-- The Air must be paired in Google Health on the same phone. Every secure
-  operation waits while Google Health syncs and hands the channel back after.
-- The Dart package adds a command queue on top (`AirHapticDispatcher`:
-  dedupe, expiry, one safe retry). It is not part of this library yet.
+- Call on the main thread; callbacks run there, once per call.
+- One operation at a time; others fail with `BUSY`. Errors are
+  `FitbitAirException` with a stable `code` and a `kind` (temporary, setup,
+  compatibility, unknown), identical to the Dart package.
+- Every secure operation waits while Google Health syncs and hands the
+  channel back afterwards.
+- A verified result means the Air accepted and the strength read back as
+  expected. It is not proof that the wearer felt it.
 
-The API is generic (`AirReply` with a map) for now and will get typed Kotlin
-results before it is published.
+## Notifications: the dispatcher
+
+For haptics triggered by notifications or pushes, submit through one
+`AirHapticDispatcher` instead of calling `tap` directly. It runs commands one
+at a time and at least 2 s apart, drops expired ones, dedupes ids for five
+minutes, and retries once only when nothing can have reached the Air.
+
+```kotlin
+val dispatcher = AirHapticDispatcher(air)
+
+dispatcher.submit(AirHapticCommand.fromEventKey(
+    source = "com.whatsapp",
+    eventKey = "${sbn.key}|${sbn.postTime}",
+    expiresAtMillis = System.currentTimeMillis() + 30_000,
+    kind = AirHapticKind.TAP,
+)) { result -> /* result.status */ }
+```
+
+`fromEventKey` makes the same id as the Dart package for the same pair.
+
+## Not here yet
+
+The research streams of the Dart `fitbit_air_diagnostics.dart` (secure and
+device events, channel activity, wrist presence) are not part of the Kotlin
+API.

@@ -53,7 +53,7 @@ import java.util.concurrent.TimeUnit
  * for permissions: request [requiredPermissions] first, or calls fail with
  * `BLUETOOTH_PERMISSION`. Call [close] when done.
  */
-class FitbitAirClient(context: Context) {
+internal class FitbitAirClient(context: Context) {
     private val appContext: Context = context.applicationContext
     private var secureEvents: AirEventSink? = null
     private var secureCapture: AirSecureEventCapture? = null

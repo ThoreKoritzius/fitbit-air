@@ -5,7 +5,7 @@ package dev.airpulse.fitbit_air
  * [error], on the main thread. Errors carry a stable code (the same codes the
  * Dart `FitbitAirException` exposes) and a message for people.
  */
-interface AirReply {
+internal interface AirReply {
     fun success(value: Any?)
     fun error(code: String, message: String)
 }
@@ -14,7 +14,7 @@ interface AirReply {
  * Events from one [FitbitAirClient] stream, on the main thread. A stream ends
  * with [endOfStream], usually right after an [error].
  */
-interface AirEventSink {
+internal interface AirEventSink {
     fun success(event: Any?)
     fun error(code: String, message: String)
     fun endOfStream()
