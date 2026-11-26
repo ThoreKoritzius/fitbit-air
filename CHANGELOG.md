@@ -11,7 +11,11 @@
   warm link's last write never reported completion, the replacement
   connection inherited the "write in progress" state and its first handshake
   packet never left, so the command timed out as if the Air did not answer.
-  The outstanding write now belongs to its connection.
+  The outstanding write now belongs to its connection; a handshake retry on
+  the same connection still waits for the write Android is finishing, and a
+  write whose completion never arrives stops blocking after a second.
+- **A packet Android declines to send is retried** every 25 ms for up to half
+  a second, instead of waiting for the next packet to move the queue on.
 - **Setup steps Android declines fail fast and are logged:** a service
   discovery Android does not start now fails with `GATT_DISCOVERY` instead of
   waiting for the operation timeout, and the warm link logs which setup step

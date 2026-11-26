@@ -6,10 +6,11 @@ import org.junit.jupiter.api.Test
 class AirTxQueueTest {
     private val warm = Any()
     private val fresh = Any()
+    private var now = 0L
+    private val queue = AirTxQueue { now }
     private fun packet(n: Int) = byteArrayOf(n.toByte())
 
     @Test fun `one write at a time on a connection`() {
-        val queue = AirTxQueue()
         queue.add(packet(1)); queue.add(packet(2))
         assertArrayEquals(packet(1), queue.next(warm))
         assertNull(queue.next(warm))
@@ -20,10 +21,9 @@ class AirTxQueueTest {
     @Test fun `a replacement connection sends its first packet although the old write never completed`() {
         // Review: the flag of a write whose callback never came stayed set after the silent-link
         // fallback, so the fresh connection's first handshake packet never left the queue.
-        val queue = AirTxQueue()
         queue.add(packet(1))
         assertArrayEquals(packet(1), queue.next(warm)) // completion never arrives
-        queue.clear() // the session is reset for the fresh connection
+        queue.clear()
         queue.add(packet(9))
         assertArrayEquals(packet(9), queue.next(fresh))
         // A late completion from the old connection does not touch the new write.
@@ -32,19 +32,47 @@ class AirTxQueueTest {
         assertTrue(queue.written(fresh))
     }
 
-    @Test fun `even without a reset the old connection's write does not block the new one`() {
-        val queue = AirTxQueue()
-        queue.add(packet(1)); queue.add(packet(2))
+    @Test fun `a handshake retry on the same connection resumes when the earlier write completes`() {
+        // Review: clearing the outstanding write on a session restart let the next packet be
+        // written while Android was still busy; it was declined, and the late completion was then
+        // ignored, so the packet stayed queued.
+        queue.add(packet(1))
         queue.next(warm)
-        assertArrayEquals(packet(2), queue.next(fresh))
+        queue.clear() // new session, same connection
+        queue.add(packet(2))
+        assertNull(queue.next(warm)) // still waiting for Android
+        assertTrue(queue.written(warm)) // the late completion counts
+        assertArrayEquals(packet(2), queue.next(warm))
     }
 
-    @Test fun `a declined write goes back to the front and frees the connection`() {
-        val queue = AirTxQueue()
+    @Test fun `a write whose completion never arrives stops blocking after a second`() {
         queue.add(packet(1)); queue.add(packet(2))
-        val first = queue.next(fresh)!!
-        queue.declined(fresh, first)
+        queue.next(warm)
+        now = AirTxQueue.STALE_MILLIS - 1
+        assertNull(queue.next(warm))
+        now = AirTxQueue.STALE_MILLIS
+        assertArrayEquals(packet(2), queue.next(warm))
+    }
+
+    @Test fun `a declined write goes back to the front and is retried a bounded number of times`() {
+        queue.add(packet(1)); queue.add(packet(2))
+        repeat(AirTxQueue.MAX_DECLINED_IN_A_ROW) {
+            val first = queue.next(fresh)!!
+            assertArrayEquals(packet(1), first)
+            assertTrue(queue.declined(fresh, first))
+        }
+        assertFalse(queue.declined(fresh, queue.next(fresh)!!))
         assertEquals(2, queue.size)
-        assertArrayEquals(packet(1), queue.next(fresh))
+        // A completed write starts the count again.
+        queue.next(fresh); queue.written(fresh)
+        assertTrue(queue.declined(fresh, queue.next(fresh)!!))
+    }
+
+    @Test fun `reset forgets the outstanding write`() {
+        queue.add(packet(1)); queue.add(packet(2))
+        queue.next(warm)
+        queue.reset()
+        queue.add(packet(3))
+        assertArrayEquals(packet(3), queue.next(warm))
     }
 }
