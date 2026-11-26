@@ -63,12 +63,12 @@ class CalendarNotificationListener : NotificationListenerService() {
         }
         // The Phone app may re-post a ringing call without its call category: the call goes on.
         if (ringing && RelayCallPolicy.stillRinging(callStyle, declaredType)) {
-            relay?.onIncomingCall(sbn.packageName, sbn.key, sbn.postTime)
+            relay?.onIncomingCallNotification(sbn.packageName, sbn.key, sbn.postTime)
             return
         }
         // A call notification that is no longer ringing means the call was answered or ended.
         // Other notifications never end a call.
-        if (sbn.notification.category == Notification.CATEGORY_CALL || ringing) relay?.onCallEnded(sbn.key, "no longer ringing")
+        if (sbn.notification.category == Notification.CATEGORY_CALL || ringing) relay?.onCallNotRinging(sbn.key, "no longer ringing")
         if (callType == RelayCallPolicy.ONGOING ||
             callType == RelayCallPolicy.SCREENING) return
         runCatching { RelayConversations.observe(sbn.packageName, sbn.notification, sbn.isOngoing, appLabel(sbn.packageName)) }

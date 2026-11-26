@@ -48,7 +48,7 @@ internal class RelayPhoneCalls(private val context: Context, private val onChang
     private fun register() {
         val current = activeSubscriptions()
         if (listening && current == subscriptions) return
-        unregister()
+        unregister(keep = current)
         subscriptions = current
         runCatching { current.forEach(::listen) }.onFailure {
             android.util.Log.w("AirRelay", "phone call state unavailable: ${it.javaClass.simpleName}")
@@ -56,10 +56,11 @@ internal class RelayPhoneCalls(private val context: Context, private val onChang
         }
     }
 
-    private fun unregister() {
+    /** [keep]: SIMs that stay active keep their state, so a call in progress stays one. */
+    private fun unregister(keep: Set<Int> = emptySet()) {
         registrations.forEach { runCatching(it) }
         registrations.clear()
-        tracker.clear()
+        tracker.retain(keep)
     }
 
     private fun activeSubscriptions(): Set<Int> = runCatching {
@@ -139,7 +140,11 @@ internal class RelayPhoneCallTracker {
         else -> PhoneCallState.IDLE
     }
 
-    fun clear() { states.clear(); inCall.clear() }
+    /** Forgets SIMs no longer active; the rest keep their state. */
+    fun retain(subscriptions: Set<Int>) {
+        states.keys.retainAll(subscriptions)
+        inCall.retainAll(subscriptions)
+    }
 }
 
 /**
@@ -160,11 +165,15 @@ internal class RelayPhoneCallRouter {
     data class End(val keys: Set<String>) : Action
 
     var listening = false
-        set(value) { field = value; if (!value) { state = PhoneCallState.IDLE; waiting.clear() } }
+        set(value) { field = value; if (!value) { state = PhoneCallState.IDLE; waiting.clear(); adopted.clear() } }
     private var state = PhoneCallState.IDLE
     private val waiting = mutableSetOf<String>()
     /** Notification rings that belong to the current phone call. */
     private val notificationRings = mutableSetOf<String>()
+    /** Notification rings the call state confirmed: only the call state ends them. */
+    private val adopted = mutableSetOf<String>()
+
+    fun ownedByCallState(key: String): Boolean = listening && key in adopted
 
     /** A ringing-call notification from the Phone app. Null: nothing new (a re-post while waiting). */
     fun notification(key: String): Action? = when {
@@ -185,7 +194,10 @@ internal class RelayPhoneCallRouter {
     }
 
     /** The notification went away or its call ended some other way. */
-    fun notificationGone(key: String) { waiting -= key; notificationRings -= key }
+    fun notificationGone(key: String) {
+        waiting -= key
+        if (key !in adopted) notificationRings -= key
+    }
 
     fun callState(next: PhoneCallState): List<Action> {
         val previous = state
@@ -194,13 +206,15 @@ internal class RelayPhoneCallRouter {
         if (next == PhoneCallState.RINGING) {
             val held = waiting.map { Skip(it, "via_call_state") }
             waiting.clear()
-            // A notification that already rings is this call: the call state only takes over ending it.
+            // A notification that already rings is this call: the call state takes over its lifetime.
+            adopted += notificationRings
             val ring = if (notificationRings.isEmpty()) listOf(Ring(RelayPhoneCalls.KEY)) else emptyList()
             return held + ring
         }
         // Answered, declined or missed: whatever rings for the phone call stops.
         val ended = setOf(RelayPhoneCalls.KEY) + notificationRings
         notificationRings.clear()
+        adopted.clear()
         val held = waiting.map { Skip(it, if (next == PhoneCallState.IN_CALL) "call_waiting" else "call_ended") }
         waiting.clear()
         return held + End(ended)
