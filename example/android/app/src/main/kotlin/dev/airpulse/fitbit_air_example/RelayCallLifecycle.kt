@@ -69,12 +69,12 @@ internal class RelayCallLifecycle(
     /** Whether a ring for [key] is pending: waiting for the call state, or removed and maybe coming back. */
     fun tracks(key: String): Boolean = key in notifications || key in pendingEnds
 
-    /** A notification went away. [call]: it was a call notification. */
-    fun removed(key: String, call: Boolean) {
+    /** A notification went away. Only one that rings or waits to ring can end a call. */
+    fun removed(key: String) {
         // Gone before the call state answered for it: no ring yet. A re-post within the
         // grace period (even without its call category) waits afresh.
         val waiting = fallbacks.remove(key)?.let { it(); router.notificationGone(key); true } ?: false
-        if (!call && !waiting && !callbacks.isRinging(key)) return
+        if (!waiting && !callbacks.isRinging(key)) return
         if (key in pendingEnds) return
         pendingEnds[key] = timers.post(REMOVAL_GRACE_MS) {
             pendingEnds.remove(key)
@@ -119,7 +119,10 @@ internal class RelayCallLifecycle(
                 }
             }
             is RelayPhoneCallRouter.Skip -> {
+                // The call state speaks for this call: later updates of the notification are not
+                // a call of their own, even once the call has ended.
                 fallbacks.remove(action.key)?.invoke()
+                notifications.remove(action.key)
                 callbacks.outcome(action.key, action.reason)
             }
             is RelayPhoneCallRouter.End -> action.keys.forEach { callbacks.end(it, "stopped ringing (call state)") }

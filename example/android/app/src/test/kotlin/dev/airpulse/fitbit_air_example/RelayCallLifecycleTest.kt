@@ -71,23 +71,53 @@ class RelayCallLifecycleTest {
         val (timers, relay) = setup()
         relay.post("n", callType = incoming, isCall = true)
         timers.advanceTo(500)
-        relay.lifecycle.removed("n", call = true)
+        relay.lifecycle.removed("n")
         timers.advanceTo(600)
         relay.post("n", callType = 0, isCall = false, declaredType = incoming)
         timers.advanceTo(2_100)
         assertEquals(listOf("n"), relay.rings)
         // Removed for good: the ring ends after the grace period.
-        relay.lifecycle.removed("n", call = false)
+        relay.lifecycle.removed("n")
         timers.advanceTo(4_000)
         assertEquals(listOf("n"), relay.ends)
         assertFalse(relay.lifecycle.tracks("n"))
+    }
+
+    @Test fun `a late notification update after the call state ended the call never rings`() {
+        // Review: the skipped notification stayed tracked, so a category-less CallStyle update
+        // after IDLE counted as the call going on and rang 1.5 s later on an idle phone.
+        val (timers, relay) = setup()
+        relay.lifecycle.callState(PhoneCallState.RINGING)
+        relay.post("n", callType = incoming, isCall = true)
+        assertEquals("via_call_state", relay.outcomes["n"])
+        relay.lifecycle.callState(PhoneCallState.IDLE)
+        assertEquals(listOf(phone), relay.ends)
+        assertFalse(relay.lifecycle.tracks("n"))
+        relay.post("n", callType = 0, isCall = false, declaredType = 0)
+        relay.lifecycle.removed("n")
+        timers.advanceTo(1_000)
+        relay.post("n", callType = 0, isCall = false, declaredType = 0)
+        timers.advanceTo(10_000)
+        assertEquals(listOf(phone), relay.rings)
+        assertTrue(relay.ringing.isEmpty())
+        assertFalse(relay.lifecycle.tracks("n"))
+    }
+
+    @Test fun `a call waiting notification stays untracked after the call`() {
+        val (timers, relay) = setup()
+        relay.lifecycle.callState(PhoneCallState.IN_CALL)
+        relay.post("w", callType = incoming, isCall = true)
+        relay.lifecycle.callState(PhoneCallState.IDLE)
+        relay.post("w", callType = 0, isCall = false, declaredType = 0)
+        timers.advanceTo(10_000)
+        assertTrue(relay.rings.isEmpty())
     }
 
     @Test fun `a call notification removed during the wait and not re-posted never rings`() {
         val (timers, relay) = setup()
         relay.post("n", callType = incoming, isCall = true)
         timers.advanceTo(500)
-        relay.lifecycle.removed("n", call = true)
+        relay.lifecycle.removed("n")
         assertTrue(relay.lifecycle.tracks("n"))
         timers.advanceTo(10_000)
         assertTrue(relay.rings.isEmpty())
@@ -131,7 +161,7 @@ class RelayCallLifecycleTest {
         val (timers, relay) = setup()
         relay.lifecycle.incoming("dialer", "n", 0, phoneApp = true)
         timers.advanceTo(500)
-        relay.lifecycle.removed("n", call = true)
+        relay.lifecycle.removed("n")
         timers.advanceTo(600)
         relay.lifecycle.incoming("dialer", "n", 600, phoneApp = true)
         timers.advanceTo(10_000)
@@ -148,7 +178,7 @@ class RelayCallLifecycleTest {
         assertEquals(listOf("n"), relay.rings)
         relay.lifecycle.callState(PhoneCallState.RINGING)
         assertEquals(listOf("n"), relay.rings) // no second ring
-        relay.lifecycle.removed("n", call = true)
+        relay.lifecycle.removed("n")
         relay.lifecycle.notRinging("n", "no longer ringing")
         timers.advanceTo(10_000)
         assertTrue(relay.ends.isEmpty())
@@ -169,7 +199,7 @@ class RelayCallLifecycleTest {
         val (timers, relay) = setup()
         relay.lifecycle.incoming("dialer", "n", 0, phoneApp = true)
         timers.advanceTo(1_500)
-        relay.lifecycle.removed("n", call = true)
+        relay.lifecycle.removed("n")
         timers.advanceTo(2_900)
         assertTrue(relay.ends.isEmpty())
         timers.advanceTo(3_000)
@@ -180,7 +210,7 @@ class RelayCallLifecycleTest {
         val (timers, relay) = setup()
         relay.lifecycle.incoming("dialer", "n", 0, phoneApp = true)
         timers.advanceTo(500)
-        relay.lifecycle.removed("n", call = true)
+        relay.lifecycle.removed("n")
         timers.advanceTo(10_000)
         assertTrue(relay.rings.isEmpty())
     }
@@ -198,7 +228,7 @@ class RelayCallLifecycleTest {
         val (timers, relay) = setup(listening = false)
         relay.lifecycle.incoming("dialer", "n", 0, phoneApp = true)
         assertEquals(listOf("n"), relay.rings)
-        relay.lifecycle.removed("n", call = true)
+        relay.lifecycle.removed("n")
         timers.advanceTo(1_000)
         relay.lifecycle.incoming("dialer", "n", 1_000, phoneApp = true)
         timers.advanceTo(10_000)
