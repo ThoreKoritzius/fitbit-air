@@ -196,8 +196,10 @@ permission. With calls already on (for example after an update), Home shows
 after declining, the Incoming calls sheet still offers **Allow phone access**. With it, Air Relay follows Android's call state
 for phone (SIM) calls on every SIM: the Air rings while the call rings and stops
 as soon as it is answered or ends. Only the state is read, never the number.
-The Phone app's call notification then waits up to 1.5 s for the call state
-and only rings the Air if the call state did not report the call. Calls from
+SIMs added while the relay runs are picked up. A call waiting during another
+call never rings the Air. The Phone app's call notification then waits up to
+1.5 s for the call state and only rings the Air if the call state did not report
+the call; whichever started the ring, answering or ending the call stops it. Calls from
 other apps still come from their notifications.
 
 A ringing call takes priority over messages in the same queued burst. If a
