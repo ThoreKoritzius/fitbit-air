@@ -30,6 +30,7 @@ void main() {
   var pulseStyle = 'single';
   bool? batteryUnrestricted;
   var pausesOptimizedApps = false;
+  var phoneCallAccess = false;
   Map<Object?, Object?>? lastSelection;
   Object? lastTapArguments;
   late List<Map<String, Object?>> history;
@@ -65,6 +66,7 @@ void main() {
     pulseStyle = 'single';
     batteryUnrestricted = null;
     pausesOptimizedApps = false;
+    phoneCallAccess = false;
     rules = {
       'defaultPreset': 'single',
       'apps': <String, Object?>{},
@@ -109,7 +111,11 @@ void main() {
                 'conversations': conversations,
                 'batteryUnrestricted': batteryUnrestricted,
                 'pausesOptimizedApps': pausesOptimizedApps,
+                'phone': {'callStateAccess': phoneCallAccess},
               };
+            case 'allowPhoneCalls':
+              phoneCallAccess = true;
+              return null;
             case 'saveSetupStep':
               setupStep = (call.arguments as Map)['step'] as int;
               return null;
@@ -218,6 +224,9 @@ void main() {
               return null;
             case 'saveKeywordRules':
               rules['keywordRules'] = (call.arguments as Map)['rules'];
+              return null;
+            case 'setCallAlertsEnabled':
+              rules['callAlertsEnabled'] = (call.arguments as Map)['enabled'];
               return null;
             case 'saveCallPreset':
               final args = call.arguments as Map;
@@ -1338,6 +1347,56 @@ void main() {
     await tap(tester, 'call-mode-ring');
     expect(rules['callRing'], isTrue);
     expect(find.text('Rings until you answer'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('turning calls on asks for phone access, the sheet asks again', (
+    tester,
+  ) async {
+    access = true;
+    rules.addAll({'callAlertsSupported': true, 'callAlertsEnabled': true});
+    await mount(tester);
+    await tap(tester, 'nav-rules');
+    await tap(tester, 'incoming-calls');
+    expect(calls, isNot(contains('allowPhoneCalls')));
+    await tap(tester, 'incoming-calls');
+    expect(calls.where((c) => c == 'allowPhoneCalls'), hasLength(1));
+    // Granted now: the sheet no longer offers it.
+    await controller.refresh(force: true);
+    await tester.pumpAndSettle();
+    await tap(tester, 'call-vibration');
+    expect(find.byKey(const ValueKey('allow-phone-calls')), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('Home asks once for phone access when calls are already on', (
+    tester,
+  ) async {
+    access = true;
+    rules.addAll({'callAlertsSupported': true, 'callAlertsEnabled': true});
+    await mount(tester);
+    expect(
+      find.byKey(const ValueKey('phone-access-suggestion')),
+      findsOneWidget,
+    );
+    await tap(tester, 'allow-phone-access');
+    expect(calls, contains('allowPhoneCalls'));
+    await controller.refresh(force: true);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('phone-access-suggestion')), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('the calls sheet offers phone access until it is allowed', (
+    tester,
+  ) async {
+    access = true;
+    rules.addAll({'callAlertsSupported': true, 'callAlertsEnabled': true});
+    await mount(tester);
+    await tap(tester, 'nav-rules');
+    await tap(tester, 'call-vibration');
+    await tap(tester, 'allow-phone-calls');
+    expect(calls, contains('allowPhoneCalls'));
     await tester.pumpWidget(const SizedBox());
   });
 

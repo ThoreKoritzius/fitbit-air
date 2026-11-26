@@ -1,3 +1,19 @@
+## Unreleased
+
+### Example app
+
+- **Phone calls straight from Android** (#43): turning on Rules → Incoming
+  calls also asks for the Phone permission. With calls already on, Home
+  asks once (**Let phone calls ring reliably**); after declining, the
+  Incoming calls sheet still offers it. With it, Air Relay follows Android's
+  call state for phone calls, on every SIM, instead of relying on how the phone
+  maker's call app shows the call. The Air rings while the call rings and
+  stops as soon as it is answered or ends. Only the state is read, never the
+  number. The call notification stays as a fallback, and app calls such as
+  WhatsApp still come from notifications.
+- **Turning on Incoming calls works on Android 13 and older:** the switch
+  showed since 0.4.1 but saving it still required Android 14.
+
 ## 0.4.1
 
 Air Relay only; the `fitbit_air` package is unchanged at 0.4.0.

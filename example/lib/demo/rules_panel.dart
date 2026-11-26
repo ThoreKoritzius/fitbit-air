@@ -80,14 +80,13 @@ class RulesPanel extends StatelessWidget {
                   value: settings.callAlertsEnabled,
                   onChanged: busy
                       ? null
-                      : (enabled) =>
-                            perform(() => state.setCallAlertsEnabled(enabled)),
+                      : (enabled) => perform(() => _setCalls(state, enabled)),
                 ),
                 onTap: busy
                     ? null
                     : settings.callAlertsEnabled
                     ? () => _editCallMode(context, state)
-                    : () => perform(() => state.setCallAlertsEnabled(true)),
+                    : () => perform(() => _setCalls(state, true)),
               ),
           ],
         ),
@@ -181,6 +180,15 @@ class RulesPanel extends StatelessWidget {
   }
 }
 
+/// Turning calls on also asks for the Phone permission, so phone calls come
+/// straight from Android. Declining keeps calls working from notifications.
+Future<void> _setCalls(DemoController state, bool enabled) async {
+  await state.setCallAlertsEnabled(enabled);
+  if (enabled && !state.phoneCallAccess) {
+    await state.allowPhoneCalls(openSettings: false);
+  }
+}
+
 /// How an incoming call buzzes: a ring by default, or one of the vibrations once.
 String callModeLabel(RelaySettings settings) => settings.callRing
     ? 'Rings until you answer'
@@ -233,6 +241,22 @@ Future<void> _editCallMode(BuildContext context, DemoController state) async {
                 ],
               ),
             ),
+            if (!state.phoneCallAccess) ...[
+              const Divider(),
+              ListTile(
+                key: const ValueKey('allow-phone-calls'),
+                leading: const Icon(Icons.dialer_sip_outlined),
+                title: const Text('Allow phone access'),
+                subtitle: const Text(
+                  'Phone calls ring more reliably on some phones. Only '
+                  'whether a call rings, never the number.',
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  state.allowPhoneCalls();
+                },
+              ),
+            ],
           ],
         ),
       ),

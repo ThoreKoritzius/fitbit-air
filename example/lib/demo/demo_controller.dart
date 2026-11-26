@@ -1033,6 +1033,22 @@ class DemoController extends ChangeNotifier {
     return _relayCall('testPulse');
   }
 
+  /// Calls are on but phone access was never answered, as after updating:
+  /// worth asking once on Home. Declining hides it; the calls sheet still offers it.
+  bool get suggestPhoneAccess =>
+      settings.callAlertsSupported &&
+      settings.callAlertsEnabled &&
+      !phoneCallAccess &&
+      phoneInfo['callStateDeclined'] != true;
+
+  /// Whether phone calls come straight from Android's call state (the Phone permission).
+  bool get phoneCallAccess => phoneInfo['callStateAccess'] == true;
+
+  /// Asks for the Phone permission. Once Android stops asking, opens App info
+  /// if [openSettings], else does nothing.
+  Future<void> allowPhoneCalls({bool openSettings = true}) => channel
+      .invokeMethod<void>('allowPhoneCalls', {'openSettings': openSettings});
+
   Future<void> allowNotificationControls() async {
     await channel.invokeMethod<void>('allowNotificationControls');
     await refresh(force: true);

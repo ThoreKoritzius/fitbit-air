@@ -58,7 +58,7 @@ class CalendarNotificationListener : NotificationListenerService() {
         }
         if (callType == RelayCallPolicy.INCOMING) {
             if (relay == null) RelayCallSignals.outcome(sbn.key, "relay_off")
-            relay?.onIncomingCall(sbn.packageName, sbn.key, sbn.postTime)
+            relay?.onIncomingCallNotification(sbn.packageName, sbn.key, sbn.postTime)
             return
         }
         // The Phone app may re-post a ringing call without its call category: the call goes on.

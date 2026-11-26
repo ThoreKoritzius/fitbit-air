@@ -12,6 +12,8 @@ the app's data handling or permissions change.
   - On Android 11 and older only: `BLUETOOTH`, `BLUETOOTH_ADMIN` and `ACCESS_FINE_LOCATION`.
   - Relay service: `FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_CONNECTED_DEVICE`.
   - Other: `WAKE_LOCK`, `POST_NOTIFICATIONS` and `RECEIVE_BOOT_COMPLETED`, plus the notification listener service.
+  - Optional, asked only when turning on Rules → Incoming calls: `READ_PHONE_STATE`, to read whether a phone call is
+    ringing (call state only; never the number, call log or contacts).
     The boot permission only resumes the relay after a restart if the user left it on.
   - **No `INTERNET` permission.**
 
