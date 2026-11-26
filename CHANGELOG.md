@@ -1,7 +1,12 @@
-## Unreleased
+## 0.4.1
+
+Air Relay only; the `fitbit_air` package is unchanged at 0.4.0.
 
 ### Example app
 
+- **Add a chat waits ten minutes** for new messages instead of one, so there
+  is time to ask someone to send a message. The sheet shows the time left as
+  minutes and seconds.
 - **Incoming calls on Android 13 and older:** calls were only recognized on
   Android 14 and newer, so they never buzzed on older phones. They are now
   recognized on every supported version.
