@@ -11,8 +11,10 @@ import android.app.Notification
  *
  * The two arrive in either order: a summary posted just after its messages
  * buzzes for the messages held for it; a message posted just after its
- * summary alerted buzzes itself ([hold] returns true). Gmail posts the
- * summary first, a few milliseconds ahead of the message.
+ * summary alerted buzzes itself ([pairsWithSummary], then [claim] once the
+ * message matches the rules, so a muted message leaves the alert for the
+ * next one). Gmail posts the summary first, a few milliseconds ahead of the
+ * message.
  *
  * Any other summary stays quiet: its messages alert themselves, or Android
  * keeps the summary quiet (GROUP_ALERT_CHILDREN).
@@ -36,31 +38,46 @@ internal class RelayGroupAlerts(private val maxAgeMillis: Long = 30_000) {
     private val held = LinkedHashMap<String, MutableList<Message>>()
     /** Summaries that alerted with no message held yet: the message may follow. */
     private val alerted = LinkedHashMap<String, Long>()
+    /** Summary notifications already posted, so FLAG_ONLY_ALERT_ONCE only quiets their updates. */
+    private val summaryKeys = LinkedHashSet<String>()
 
-    /**
-     * A message posted quietly because its group alerts through the summary.
-     * True: its summary alerted just before, so this message buzzes now.
-     */
-    fun hold(group: String, message: Message): Boolean {
+    /** Whether a message quiet for its group summary follows a summary that just alerted: it buzzes itself. */
+    fun pairsWithSummary(group: String, postedAt: Long): Boolean {
         // setSilent(true) puts an ungrouped notification in this group: it is just quiet.
         if (group.endsWith("|$SILENT_GROUP")) return false
+        val at = alerted[group] ?: return false
+        return postedAt - at in -PAIR_MILLIS..PAIR_MILLIS
+    }
+
+    /** A message that matched the rules buzzed for the summary that just alerted. */
+    fun claim(group: String) { alerted.remove(group) }
+
+    /** A message posted quietly because its group alerts through the summary that has not come yet. */
+    fun hold(group: String, message: Message) {
+        if (group.endsWith("|$SILENT_GROUP")) return
         val postedAt = message.postedAt
-        alerted.remove(group)?.let { if (postedAt - it in -PAIR_MILLIS..PAIR_MILLIS) return true }
         val messages = held.remove(group) ?: mutableListOf()
         messages.removeAll { postedAt - it.postedAt > maxAgeMillis }
         if (messages.size < MAX_MESSAGES) messages += message
         held[group] = messages
         while (held.size > MAX_GROUPS) held.remove(held.keys.first())
-        return false
     }
+
+    /** A notification was removed: a summary posted again under [key] is new. */
+    fun removed(key: String) { summaryKeys.remove(key) }
 
     /**
      * A group summary was posted: whether it alerts now, and for which messages.
-     * [alertOnce]: FLAG_ONLY_ALERT_ONCE, so an update does not alert.
-     * [silent]: Android keeps the summary itself quiet (a quiet channel), so
-     * neither it nor its messages alert.
+     * [key]: the summary notification's own key. [alertOnce]: FLAG_ONLY_ALERT_ONCE,
+     * so its first post alerts and its updates do not. [silent]: Android keeps
+     * the summary itself quiet (a quiet channel), so neither it nor its messages alert.
      */
-    fun summary(group: String, groupAlertBehavior: Int, postedAt: Long, alertOnce: Boolean = false, silent: Boolean = false): SummaryAlert? {
+    fun summary(
+        group: String, key: String, groupAlertBehavior: Int, postedAt: Long,
+        alertOnce: Boolean = false, silent: Boolean = false,
+    ): SummaryAlert? {
+        val firstPost = summaryKeys.add(key)
+        while (summaryKeys.size > MAX_SUMMARIES) summaryKeys.remove(summaryKeys.first())
         if (silent || groupAlertBehavior == Notification.GROUP_ALERT_CHILDREN) {
             held.remove(group); alerted.remove(group); return null
         }
@@ -71,7 +88,7 @@ internal class RelayGroupAlerts(private val maxAgeMillis: Long = 30_000) {
             groupAlertBehavior == Notification.GROUP_ALERT_SUMMARY -> SummaryAlert(emptyList(), fresh = false)
             else -> {
                 // Its message may still be on the way: it buzzes when it arrives.
-                if (!alertOnce) {
+                if (!alertOnce || firstPost) {
                     alerted.remove(group); alerted[group] = postedAt
                     while (alerted.size > MAX_GROUPS) alerted.remove(alerted.keys.first())
                 }
@@ -87,6 +104,7 @@ internal class RelayGroupAlerts(private val maxAgeMillis: Long = 30_000) {
         const val PAIR_MILLIS = 2_000L
         private const val MAX_GROUPS = 32
         private const val MAX_MESSAGES = 16
+        private const val MAX_SUMMARIES = 128
 
         /** "package|group": groups only ever match within their app. */
         fun key(packageName: String, group: String) = "$packageName|$group"

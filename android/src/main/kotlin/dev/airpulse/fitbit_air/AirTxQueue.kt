@@ -10,23 +10,24 @@ package dev.airpulse.fitbit_air
  * - A new session on the same connection (a handshake retry) keeps waiting
  *   for the write Android is still processing, and its completion moves the
  *   queue on: [clear] drops packets only.
- * - A write whose completion never arrives stops blocking after [STALE_MILLIS];
- *   a write without response normally completes within milliseconds.
+ *
+ * Each accepted write gets exactly one completion, in order, so a completion
+ * always belongs to the outstanding write. If a completion never arrives,
+ * Android itself refuses further writes on that client as busy; nothing is
+ * gained by writing past it, and the operation's timeout ends the command.
  */
-internal class AirTxQueue(private val clock: () -> Long) {
+internal class AirTxQueue {
     private val packets = ArrayDeque<ByteArray>()
     private var writingOn: Any? = null
-    private var writingSince = 0L
     private var declinedInARow = 0
 
     @Synchronized fun add(packet: ByteArray) { packets.addLast(packet) }
 
     /** The next packet to write on [connection]; null while a write on it is outstanding or nothing waits. */
     @Synchronized fun next(connection: Any): ByteArray? {
-        if (writingOn === connection && clock() - writingSince < STALE_MILLIS) return null
+        if (writingOn === connection) return null
         val packet = packets.removeFirstOrNull() ?: return null
         writingOn = connection
-        writingSince = clock()
         return packet
     }
 
@@ -62,7 +63,6 @@ internal class AirTxQueue(private val clock: () -> Long) {
     @get:Synchronized val size: Int get() = packets.size
 
     companion object {
-        const val STALE_MILLIS = 1_000L
         const val MAX_DECLINED_IN_A_ROW = 20
         /** Between attempts at a declined write: 20 × 25 ms bounds the retries to half a second. */
         const val DECLINED_RETRY_MILLIS = 25L

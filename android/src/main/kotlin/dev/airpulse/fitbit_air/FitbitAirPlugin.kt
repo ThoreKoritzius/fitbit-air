@@ -112,7 +112,7 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
     private val gattCallbacks = AirSessionCallbacks({ gatt }) { action -> handler.post { action() } }
     private val sessionCallbacks = AirSessionCallbacks({ endpoint }) { action -> handler.post { action() } }
     private val disposables = CompositeDisposable()
-    private val txQueue = AirTxQueue { SystemClock.elapsedRealtime() }
+    private val txQueue = AirTxQueue()
     private var sessionStarted = false
     private var timeout: Runnable? = null
     private var activeOperation: Operation? = null
@@ -1525,11 +1525,15 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
             @Suppress("DEPRECATION") if (activeGatt.writeCharacteristic(characteristic)) BluetoothGatt.GATT_SUCCESS else -1
         }
         if (status == BluetoothGatt.GATT_SUCCESS) return
-        // Declined before anything reached the Air (usually busy with the previous write):
-        // try again shortly, as nothing else may move the queue on. Bounded, so a lasting
-        // error ends in the operation's own timeout as before.
+        // Declined before anything reached the Air. Busy (or unknown below API 33): try again
+        // shortly, as nothing else may move the queue on; bounded, so a lasting refusal ends in
+        // the operation's own timeout. Any other refusal will not pass on retry: fail now.
         val retry = txQueue.declined(activeGatt, packet)
         android.util.Log.d("FitbitAir", "tx declined status=$status retry=$retry")
+        if (status != -1 && status != WRITE_BUSY) {
+            handler.post { if (gatt === activeGatt) finishError("TX", "Android rejected the tracker channel write (status $status).") }
+            return
+        }
         if (retry) handler.postDelayed({ if (gatt === activeGatt) writeNextPacket(activeGatt) }, AirTxQueue.DECLINED_RETRY_MILLIS)
     }
 
@@ -1795,6 +1799,8 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
     }
 
     companion object {
+        /** BluetoothStatusCodes.ERROR_GATT_WRITE_REQUEST_BUSY (API 33). */
+        private const val WRITE_BUSY = 201
         private const val CHANNEL = "fitbit_air"
         private const val PERMISSION_REQUEST = 49217
         private const val OPERATION_TIMEOUT_MS = 45_000L

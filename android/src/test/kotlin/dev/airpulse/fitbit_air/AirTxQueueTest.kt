@@ -6,8 +6,7 @@ import org.junit.jupiter.api.Test
 class AirTxQueueTest {
     private val warm = Any()
     private val fresh = Any()
-    private var now = 0L
-    private val queue = AirTxQueue { now }
+    private val queue = AirTxQueue()
     private fun packet(n: Int) = byteArrayOf(n.toByte())
 
     @Test fun `one write at a time on a connection`() {
@@ -45,13 +44,15 @@ class AirTxQueueTest {
         assertArrayEquals(packet(2), queue.next(warm))
     }
 
-    @Test fun `a write whose completion never arrives stops blocking after a second`() {
-        queue.add(packet(1)); queue.add(packet(2))
+    @Test fun `a write without its completion keeps blocking, so a late completion is never another write's`() {
+        // Review: a one-second cutoff let packet 2 start while packet 1 lacked its completion; packet
+        // 1's late completion then cleared packet 2's and let packet 3 through.
+        queue.add(packet(1)); queue.add(packet(2)); queue.add(packet(3))
         queue.next(warm)
-        now = AirTxQueue.STALE_MILLIS - 1
         assertNull(queue.next(warm))
-        now = AirTxQueue.STALE_MILLIS
+        assertTrue(queue.written(warm)) // packet 1, however late
         assertArrayEquals(packet(2), queue.next(warm))
+        assertNull(queue.next(warm))
     }
 
     @Test fun `a declined write goes back to the front and is retried a bounded number of times`() {

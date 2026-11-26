@@ -24,14 +24,17 @@ class RelayGroupAlertsTest {
             val isSilent = RelaySilentPolicy.silent(importance, child, behavior)
             val held = RelaySilentPolicy.heldForSummary(importance, child, behavior)
             val groupKey = group?.let { RelayGroupAlerts.key(packageName, it) }
-            val alert = if (summary && groupKey != null) groups.summary(groupKey, behavior, at, alertOnce, isSilent) else null
+            val alert = if (summary && groupKey != null) groups.summary(groupKey, key, behavior, at, alertOnce, isSilent) else null
             if (!filter.accept(packageName, key, at, at + 100, ongoing = false, summary = summary && alert == null,
                     alertOnce = alertOnce, freshInGroup = alert?.fresh == true)) return
-            val summaryAlerted = held && groupKey != null &&
-                groups.hold(groupKey, RelayGroupAlerts.Message(chats, keyword = keyword, postedAt = at))
-            if (isSilent && !summaryAlerted) { silent += key; return }
+            val pairs = held && groupKey != null && groups.pairsWithSummary(groupKey, at)
+            if (isSilent && !pairs) {
+                if (held && groupKey != null) groups.hold(groupKey, RelayGroupAlerts.Message(chats, keyword = keyword, postedAt = at))
+                silent += key; return
+            }
             val match = if (alert != null) config.matchSummary(packageName, alert)
                 else config.match(packageName, chats, keyword = keyword?.takeIf { it in config.keywords })
+            if (match != null && pairs) groups.claim(groupKey!!)
             match?.let(buzzes::add)
         }
     }
@@ -64,6 +67,39 @@ class RelayGroupAlertsTest {
         relay.post(app, "sum", 90_000, group = "account", summary = true)
         relay.post(app, "mail3", 95_000, group = "account", summary = false, behavior = summaryOnly)
         assertEquals(2, relay.buzzes.size)
+    }
+
+    @Test fun `the first post of an alert-once summary still lets its message buzz`() {
+        // Review: FLAG_ONLY_ALERT_ONCE quiets updates only, but the first summary was not remembered,
+        // so the message after it had nothing to pair with.
+        val relay = relay()
+        relay.post(app, "sum", 1_000, group = "account", summary = true, alertOnce = true)
+        relay.post(app, "m1", 1_005, group = "account", summary = false, behavior = summaryOnly)
+        assertEquals(1, relay.buzzes.size)
+        // Its update does not alert.
+        relay.post(app, "sum", 9_000, group = "account", summary = true, alertOnce = true)
+        relay.post(app, "m2", 9_005, group = "account", summary = false, behavior = summaryOnly)
+        assertEquals(1, relay.buzzes.size)
+        // Removed and posted again: new, so it alerts.
+        relay.groups.removed("sum"); relay.filter.onRemoved("sum")
+        relay.post(app, "sum", 20_000, group = "account", summary = true, alertOnce = true)
+        relay.post(app, "m3", 20_005, group = "account", summary = false, behavior = summaryOnly)
+        assertEquals(2, relay.buzzes.size)
+    }
+
+    @Test fun `a muted message does not use up the summary's alert`() {
+        // Review: the muted message consumed the pending alert before its mute applied, and the
+        // allowed message after it was held for a summary that never came.
+        val config = RelayRuleConfig(apps = mapOf(app to RelayAppRule(true)),
+            chats = mapOf("muted" to SavedChat(app, "Muted", preset = RelayPreset.MUTE)))
+        val relay = relay(config)
+        relay.post(app, "sum", 1_000, group = "account", summary = true)
+        relay.post(app, "m1", 1_005, group = "account", summary = false, behavior = summaryOnly, chats = setOf("muted"))
+        relay.post(app, "m2", 1_010, group = "account", summary = false, behavior = summaryOnly, chats = setOf("friend"))
+        assertEquals(1, relay.buzzes.size)
+        // One alert, one buzz: a third message does not buzz again.
+        relay.post(app, "m3", 1_015, group = "account", summary = false, behavior = summaryOnly, chats = setOf("friend"))
+        assertEquals(1, relay.buzzes.size)
     }
 
     @Test fun `a quiet summary does not let the message after it buzz`() {
