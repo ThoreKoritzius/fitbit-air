@@ -2,6 +2,15 @@
 
 ### Package
 
+- **Kotlin API for Android apps without Flutter** (`android/core`, see its
+  README): `FitbitAir` with the same operations, typed results and error codes
+  as the Dart package (`FitbitAirException.kind` included), plus a Kotlin
+  `AirHapticDispatcher` with the Dart dispatcher's rules; its command ids
+  match the Dart ones. Not yet published as an artifact.
+- The Android implementation is now a Flutter-free library that the plugin
+  wraps; nothing changes for Dart users. "Another Flutter engine owns the
+  Bluetooth transport" now reads "Another Fitbit Air client owns…" (still
+  `BUSY`).
 - **Golden Gate starts when the plugin attaches**, in the background, instead
   of at the first command. Its event loop watches its sockets with `select()`,
   which aborts the app for a file descriptor of 1024 or more; started late in
