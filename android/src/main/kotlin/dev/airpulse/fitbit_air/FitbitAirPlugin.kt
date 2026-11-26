@@ -132,6 +132,7 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         appContext = binding.applicationContext
+        BundledNativeLoader.initializeEarly()
         channel = MethodChannel(binding.binaryMessenger, CHANNEL)
         channel.setMethodCallHandler(this)
         heartRateChannel = EventChannel(binding.binaryMessenger, "fitbit_air/heart_rate")
@@ -837,12 +838,27 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
                     val link = warmLink
                     if (link == null || (link.isStuck(now) && now - lastWarmLinkRebuild >= WARM_REBUILD_MIN_MS)) {
                         rebuildWarmLink(if (link == null) "missing" else "stuck")
+                    } else if (pendingResult == null && link.delegate == null) {
+                        checkIdleWarmLink(link, now)
                     }
                     handler.postDelayed(this, WARM_WATCHDOG_MS)
                 }
             }
             warmLinkWatchdog = watchdog
             handler.postDelayed(watchdog, WARM_WATCHDOG_MS)
+        }
+    }
+
+    /** A connected warm link that hears nothing subscribes again, then is replaced ([AirWarmLink.idle]). */
+    private fun checkIdleWarmLink(link: AirWarmLink, now: Long) {
+        when (link.idleCheck(now)) {
+            AirWarmLink.Idle.OK -> Unit
+            AirWarmLink.Idle.RESUBSCRIBE -> {
+                android.util.Log.d("FitbitAir", "warm link heard nothing; subscribing again")
+                AirTransportDiagnostics.recordLinkRecovery("resubscribed_deaf")
+                if (!link.resubscribe()) rebuildWarmLink("resubscribe_failed")
+            }
+            AirWarmLink.Idle.REBUILD -> rebuildWarmLink("deaf")
         }
     }
 

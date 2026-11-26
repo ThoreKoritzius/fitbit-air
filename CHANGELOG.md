@@ -1,3 +1,18 @@
+## Unreleased
+
+### Package
+
+- **Golden Gate starts when the plugin attaches**, in the background, instead
+  of at the first command. Its event loop watches its sockets with `select()`,
+  which aborts the app for a file descriptor of 1024 or more; started late in
+  an app that has opened many files, the loop's sockets could get such
+  numbers. AirBuzz hit this crash after listing installed apps.
+- **A warm link that hears nothing is repaired while idle.** After 20 minutes
+  without traffic (Google Health normally syncs within that time) it writes
+  its subscription to the Air again; still silent 20 minutes later, it is
+  replaced by a new connection. Before, a deaf warm link was only noticed by
+  the next command, which then paid for a fresh connection.
+
 ## 0.4.2
 
 Air Relay only; the `fitbit_air` package is not republished. Its native
