@@ -279,13 +279,14 @@ class CalendarRelayService : Service() {
         if (!ready || stopping) return
         val now = System.currentTimeMillis()
         val groupKey = group?.let { RelayGroupAlerts.key(packageName, it) }
-        val summaryAlert = if (summary && groupKey != null) groupAlerts.summary(groupKey, groupAlertBehavior, postedAt, alertOnce) else null
+        val summaryAlert = if (summary && groupKey != null) groupAlerts.summary(groupKey, groupAlertBehavior, postedAt, alertOnce, silent) else null
         if (filter?.accept(packageName, key, postedAt, now, ongoing, summary && summaryAlert == null, messageTimestamp, alertOnce,
                 freshInGroup = summaryAlert?.fresh == true) != true) return
         // Android keeps it quiet on the phone, so the Air stays quiet too.
         // Quiet only because its group alerts through the summary: the summary buzzes for it,
         // or, when the summary alerted just before, this message buzzes itself.
-        val summaryAlerted = heldForSummary && groupKey != null && groupAlerts.hold(groupKey, conversationIds, postedAt)
+        val summaryAlerted = heldForSummary && groupKey != null &&
+            groupAlerts.hold(groupKey, RelayGroupAlerts.Message(conversationIds, tone, keyword, postedAt))
         if (silent && !summaryAlerted) { record(nextId(), packageName, postedAt, "silent"); return }
         val config = RelayRuleStore.read(this)
         // The listener matched against the rules it saw; only keep a rule that still exists.

@@ -18,14 +18,22 @@ import android.app.Notification
  * keeps the summary quiet (GROUP_ALERT_CHILDREN).
  */
 internal class RelayGroupAlerts(private val maxAgeMillis: Long = 30_000) {
-    /**
-     * A summary that alerts. [chats]: each held message's chat identities;
-     * empty when no message was seen. [fresh]: messages arrived since the
-     * last alert, so an update of a summary already shown alerts again.
-     */
-    data class SummaryAlert(val chats: List<Set<String>>, val fresh: Boolean)
+    /** A message held for its summary, with what it decides by itself: its chat, keyword rule and tone. */
+    data class Message(
+        val identities: Set<String>,
+        val tone: RelayTone? = null,
+        val keyword: RelayKeywordRule? = null,
+        val postedAt: Long = 0,
+    )
 
-    private val held = LinkedHashMap<String, MutableList<Pair<Long, Set<String>>>>()
+    /**
+     * A summary that alerts. [messages]: the held messages it alerts for;
+     * empty when none was seen. [fresh]: messages arrived since the last
+     * alert, so an update of a summary already shown alerts again.
+     */
+    data class SummaryAlert(val messages: List<Message>, val fresh: Boolean)
+
+    private val held = LinkedHashMap<String, MutableList<Message>>()
     /** Summaries that alerted with no message held yet: the message may follow. */
     private val alerted = LinkedHashMap<String, Long>()
 
@@ -33,27 +41,32 @@ internal class RelayGroupAlerts(private val maxAgeMillis: Long = 30_000) {
      * A message posted quietly because its group alerts through the summary.
      * True: its summary alerted just before, so this message buzzes now.
      */
-    fun hold(group: String, identities: Set<String>, postedAt: Long): Boolean {
+    fun hold(group: String, message: Message): Boolean {
         // setSilent(true) puts an ungrouped notification in this group: it is just quiet.
         if (group.endsWith("|$SILENT_GROUP")) return false
+        val postedAt = message.postedAt
         alerted.remove(group)?.let { if (postedAt - it in -PAIR_MILLIS..PAIR_MILLIS) return true }
         val messages = held.remove(group) ?: mutableListOf()
-        messages.removeAll { postedAt - it.first > maxAgeMillis }
-        if (messages.size < MAX_MESSAGES) messages += postedAt to identities
+        messages.removeAll { postedAt - it.postedAt > maxAgeMillis }
+        if (messages.size < MAX_MESSAGES) messages += message
         held[group] = messages
         while (held.size > MAX_GROUPS) held.remove(held.keys.first())
         return false
     }
 
     /**
-     * A group summary was posted: whether it alerts now, and for which chats.
+     * A group summary was posted: whether it alerts now, and for which messages.
      * [alertOnce]: FLAG_ONLY_ALERT_ONCE, so an update does not alert.
+     * [silent]: Android keeps the summary itself quiet (a quiet channel), so
+     * neither it nor its messages alert.
      */
-    fun summary(group: String, groupAlertBehavior: Int, postedAt: Long, alertOnce: Boolean = false): SummaryAlert? {
-        if (groupAlertBehavior == Notification.GROUP_ALERT_CHILDREN) { held.remove(group); alerted.remove(group); return null }
-        val messages = held.remove(group).orEmpty().filter { postedAt - it.first in -maxAgeMillis..maxAgeMillis }
+    fun summary(group: String, groupAlertBehavior: Int, postedAt: Long, alertOnce: Boolean = false, silent: Boolean = false): SummaryAlert? {
+        if (silent || groupAlertBehavior == Notification.GROUP_ALERT_CHILDREN) {
+            held.remove(group); alerted.remove(group); return null
+        }
+        val messages = held.remove(group).orEmpty().filter { postedAt - it.postedAt in -maxAgeMillis..maxAgeMillis }
         return when {
-            messages.isNotEmpty() -> SummaryAlert(messages.map { it.second }, fresh = true)
+            messages.isNotEmpty() -> SummaryAlert(messages, fresh = true)
             // Declared on the summary itself: Android alerts for it even without a message seen here.
             groupAlertBehavior == Notification.GROUP_ALERT_SUMMARY -> SummaryAlert(emptyList(), fresh = false)
             else -> {
@@ -82,15 +95,20 @@ internal class RelayGroupAlerts(private val maxAgeMillis: Long = 30_000) {
 
 /**
  * The vibration for an alerting summary: the strongest match among its held
- * messages' chats, so mutes and "only saved chats" still apply. Without any
- * held message the chat is unknown, and a muted chat in the app keeps it quiet.
+ * messages, each with its own chat, keyword rule and tone, so mutes, keyword
+ * mutes and "only saved chats" still apply. Without any held message the chat
+ * is unknown, and a muted chat in the app keeps it quiet; the summary's own
+ * [tone] and [keyword] then decide.
  */
 internal fun RelayRuleConfig.matchSummary(
     packageName: String, alert: RelayGroupAlerts.SummaryAlert, tone: RelayTone? = null, keyword: RelayKeywordRule? = null,
 ): RelayMatch? {
-    if (alert.chats.isEmpty()) {
+    if (alert.messages.isEmpty()) {
         if (chats.values.any { it.packageName == packageName && it.preset == RelayPreset.MUTE }) return null
         return match(packageName, emptySet(), tone, keyword)
     }
-    return alert.chats.mapNotNull { match(packageName, it, tone, keyword) }.maxByOrNull { it.specificity }
+    return alert.messages.mapNotNull { message ->
+        // Only a rule that still exists, as for any notification.
+        match(packageName, message.identities, message.tone, message.keyword?.takeIf { it in keywords })
+    }.maxByOrNull { it.specificity }
 }
