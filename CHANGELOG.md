@@ -7,6 +7,15 @@
   Air rejected the tap still matched and the tap counted as verified. A
   rejection now fails with `HAPTIC_TAP_FAILED`, and a tap whose reply is lost
   fails with `HAPTIC_UNCONFIRMED` (never resent) instead of counting as played.
+- **A fresh connection after a silent warm link can always send.** If the
+  warm link's last write never reported completion, the replacement
+  connection inherited the "write in progress" state and its first handshake
+  packet never left, so the command timed out as if the Air did not answer.
+  The outstanding write now belongs to its connection.
+- **Setup steps Android declines fail fast and are logged:** a service
+  discovery Android does not start now fails with `GATT_DISCOVERY` instead of
+  waiting for the operation timeout, and the warm link logs which setup step
+  (discovery or subscription) did not start.
 
 ### Example app
 

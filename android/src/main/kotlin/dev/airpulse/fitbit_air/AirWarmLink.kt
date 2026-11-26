@@ -90,19 +90,28 @@ internal class AirWarmLink(private val context: Context) {
         runCatching { connection?.close() }
     }
 
+    /**
+     * Subscribes to the tracker channel. A step Android declines to start is
+     * logged by name: the link then stays not ready, and the watchdog replaces
+     * it once [isStuck].
+     */
     private fun subscribe(g: BluetoothGatt) {
-        val rx = g.getService(TRACKER_SERVICE)?.getCharacteristic(TRACKER_RX) ?: return
-        val cccd = rx.getDescriptor(CCCD) ?: return
-        if (!g.setCharacteristicNotification(rx, true)) return
-        if (Build.VERSION.SDK_INT >= 33) {
-            g.writeDescriptor(cccd, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+        val rx = g.getService(TRACKER_SERVICE)?.getCharacteristic(TRACKER_RX)
+            ?: return setupFailed("tracker channel not found")
+        val cccd = rx.getDescriptor(CCCD) ?: return setupFailed("subscription descriptor not found")
+        if (!g.setCharacteristicNotification(rx, true)) return setupFailed("notification routing declined")
+        val started = if (Build.VERSION.SDK_INT >= 33) {
+            g.writeDescriptor(cccd, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE) == BluetoothGatt.GATT_SUCCESS
         } else {
             @Suppress("DEPRECATION")
             cccd.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
             @Suppress("DEPRECATION")
             g.writeDescriptor(cccd)
         }
+        if (!started) setupFailed("subscription write declined")
     }
+
+    private fun setupFailed(step: String) { android.util.Log.w("FitbitAir", "warm link setup: $step") }
 
     private fun record(size: Int) {
         val now = SystemClock.elapsedRealtime()
@@ -118,7 +127,7 @@ internal class AirWarmLink(private val context: Context) {
             handler.post {
                 if (closed || g !== gatt) return@post
                 if (status == BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_CONNECTED) {
-                    if (!ready) g.discoverServices()
+                    if (!ready && !g.discoverServices()) setupFailed("service discovery declined")
                 } else {
                     markNotReady()
                 }
@@ -128,7 +137,8 @@ internal class AirWarmLink(private val context: Context) {
         override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
             delegate?.onServicesDiscovered(g, status)
             handler.post {
-                if (closed || g !== gatt || ready || status != BluetoothGatt.GATT_SUCCESS) return@post
+                if (closed || g !== gatt || ready) return@post
+                if (status != BluetoothGatt.GATT_SUCCESS) return@post setupFailed("service discovery failed (status $status)")
                 subscribe(g)
             }
         }
@@ -137,10 +147,11 @@ internal class AirWarmLink(private val context: Context) {
             delegate?.onDescriptorWrite(g, descriptor, status)
             handler.post {
                 if (closed || g !== gatt) return@post
-                if (descriptor.characteristic.uuid == TRACKER_RX && status == BluetoothGatt.GATT_SUCCESS) {
+                if (descriptor.characteristic.uuid != TRACKER_RX) return@post
+                if (status == BluetoothGatt.GATT_SUCCESS) {
                     readyAt = SystemClock.elapsedRealtime()
                     ready = true
-                }
+                } else setupFailed("subscription failed (status $status)")
             }
         }
 

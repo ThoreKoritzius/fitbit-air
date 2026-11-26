@@ -112,8 +112,7 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
     private val gattCallbacks = AirSessionCallbacks({ gatt }) { action -> handler.post { action() } }
     private val sessionCallbacks = AirSessionCallbacks({ endpoint }) { action -> handler.post { action() } }
     private val disposables = CompositeDisposable()
-    private val txQueue = ArrayDeque<ByteArray>()
-    private var writeInFlight = false
+    private val txQueue = AirTxQueue()
     private var sessionStarted = false
     private var timeout: Runnable? = null
     private var activeOperation: Operation? = null
@@ -625,7 +624,8 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
                     // Signal strength needs only the link, not services or the tracker channel.
                     if (!g.readRemoteRssi()) finishError("RSSI", "Android rejected the signal-strength read.")
                 } else if (newState == android.bluetooth.BluetoothProfile.STATE_CONNECTED) {
-                    g.discoverServices()
+                    // Otherwise the operation would wait for a discovery that never starts until it times out.
+                    if (!g.discoverServices()) finishError("GATT_DISCOVERY", "Android did not start service discovery.")
                 } else if (newState == android.bluetooth.BluetoothProfile.STATE_DISCONNECTED) {
                     finishError("GATT_DISCONNECTED", "Air disconnected before the operation finished.")
                 }
@@ -708,8 +708,7 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
             }
 
             override fun onCharacteristicWrite(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) = gattCallbacks.dispatch(g) {
-                if (g !== gatt) return@dispatch
-                writeInFlight = false
+                if (g !== gatt || !txQueue.written(g)) return@dispatch
                 if (status != BluetoothGatt.GATT_SUCCESS) {
                     finishError("TX", "Tracker channel write failed (status $status).")
                 } else {
@@ -1059,7 +1058,7 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
             disposables.add(sink.dataObservable.subscribe({ data ->
                 gattCallbacks.dispatch(activeGatt) {
                     if (txSink !== sink) return@dispatch
-                    synchronized(txQueue) { txQueue.addLast(data) }
+                    txQueue.add(data)
                     writeNextPacket(activeGatt)
                 }
             }, { error -> gattCallbacks.dispatch(activeGatt) {
@@ -1158,7 +1157,7 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
         stack?.close(); stack = null
         rxSource?.close(); rxSource = null
         txSink?.close(); txSink = null
-        synchronized(txQueue) { txQueue.clear() }
+        txQueue.clear()
     }
 
     @SuppressLint("MissingPermission")
@@ -1514,10 +1513,9 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
 
     @SuppressLint("MissingPermission")
     private fun writeNextPacket(activeGatt: BluetoothGatt?) {
-        if (activeGatt == null || writeInFlight) return
+        if (activeGatt == null) return
         val characteristic = txCharacteristic ?: return
-        val packet = synchronized(txQueue) { if (txQueue.isEmpty()) null else txQueue.removeFirst() } ?: return
-        writeInFlight = true
+        val packet = txQueue.next(activeGatt) ?: return
         val accepted = if (Build.VERSION.SDK_INT >= 33) {
             activeGatt.writeCharacteristic(characteristic, packet, BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE) == BluetoothGatt.GATT_SUCCESS
         } else {
@@ -1525,10 +1523,7 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
             @Suppress("DEPRECATION") characteristic.value = packet
             @Suppress("DEPRECATION") activeGatt.writeCharacteristic(characteristic)
         }
-        if (!accepted) {
-            writeInFlight = false
-            synchronized(txQueue) { txQueue.addFirst(packet) }
-        }
+        if (!accepted) txQueue.declined(activeGatt, packet)
     }
 
     private fun finishSessionSuccess(coap: CoapEndpoint, value: Map<String, Any>) {
@@ -1625,7 +1620,7 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
                 if (pending.muted) return@subscribe
                 gattCallbacks.dispatch(activeGatt) {
                     if (handoff !== pending || txSink !== sink || pending.muted) return@dispatch
-                    synchronized(txQueue) { txQueue.addLast(data) }
+                    txQueue.add(data)
                     writeNextPacket(activeGatt)
                 }
             }, { handler.post { completeHandoff(pending, "failed") } }))
@@ -1718,8 +1713,7 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
         trace.step("rxSource", rxSource != null) { rxSource?.close() }; rxSource = null
         trace.step("txSink", txSink != null) { txSink?.close() }; txSink = null
         txCharacteristic = null
-        synchronized(txQueue) { txQueue.clear() }
-        writeInFlight = false
+        txQueue.clear()
         trace.step("linkPriority", closingGatt != null && linkBoosted) {
             closingGatt?.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_LOW_POWER)
         }
