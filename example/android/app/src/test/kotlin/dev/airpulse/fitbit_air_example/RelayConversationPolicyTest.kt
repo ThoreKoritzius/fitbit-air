@@ -54,13 +54,13 @@ class RelayConversationPolicyTest {
     @Test fun captureExpiryKeepsResultsAvailableForSelectionButStopsListening() {
         val window = ConversationCaptureWindow()
         window.start(1000)
-        assertTrue(window.listening(60_999))
-        assertFalse(window.listening(61_000))
-        assertTrue(window.selectable(61_000))
-        assertFalse(window.selectable(361_000))
+        assertTrue(window.listening(600_999))
+        assertFalse(window.listening(601_000))
+        assertTrue(window.selectable(601_000))
+        assertFalse(window.selectable(901_000))
         // Even a callback delivered after deep sleep must not resurrect stale results.
-        window.finish(900_000)
-        assertFalse(window.selectable(900_000))
+        window.finish(1_500_000)
+        assertFalse(window.selectable(1_500_000))
     }
 
     @Test fun explicitStopPreservesResultsAndClearRemovesThem() {

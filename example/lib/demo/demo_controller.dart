@@ -793,7 +793,7 @@ class DemoController extends ChangeNotifier {
       knownChatApps[packageName] ??
       'Chat app';
 
-  /// Lists chats from current chat notifications and listens for new ones for a minute.
+  /// Lists chats from current chat notifications and listens for new ones for ten minutes.
   Future<void> findChats(bool listen) =>
       _relayCall('captureConversations', {'enabled': listen});
   Future<void> saveDefaultPreset(VibrationPreset preset) =>
