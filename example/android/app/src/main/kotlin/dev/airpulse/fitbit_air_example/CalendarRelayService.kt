@@ -279,22 +279,26 @@ class CalendarRelayService : Service() {
         if (!ready || stopping) return
         val now = System.currentTimeMillis()
         val groupKey = group?.let { RelayGroupAlerts.key(packageName, it) }
-        val summaryAlert = if (summary && groupKey != null) groupAlerts.summary(groupKey, groupAlertBehavior, postedAt, alertOnce, silent) else null
+        val summaryAlert = if (summary && groupKey != null) groupAlerts.summary(groupKey, key, groupAlertBehavior, postedAt, alertOnce, silent) else null
         if (filter?.accept(packageName, key, postedAt, now, ongoing, summary && summaryAlert == null, messageTimestamp, alertOnce,
                 freshInGroup = summaryAlert?.fresh == true) != true) return
-        // Android keeps it quiet on the phone, so the Air stays quiet too.
-        // Quiet only because its group alerts through the summary: the summary buzzes for it,
-        // or, when the summary alerted just before, this message buzzes itself.
-        val summaryAlerted = heldForSummary && groupKey != null &&
-            groupAlerts.hold(groupKey, RelayGroupAlerts.Message(conversationIds, tone, keyword, postedAt))
-        if (silent && !summaryAlerted) { record(nextId(), packageName, postedAt, "silent"); return }
+        // Android keeps it quiet on the phone, so the Air stays quiet too. Quiet only because its
+        // group alerts through the summary: when the summary alerted just before, this message
+        // buzzes itself; otherwise the summary that follows buzzes for it.
+        val pairsWithSummary = heldForSummary && groupKey != null && groupAlerts.pairsWithSummary(groupKey, postedAt)
+        if (silent && !pairsWithSummary) {
+            if (heldForSummary && groupKey != null) groupAlerts.hold(groupKey, RelayGroupAlerts.Message(conversationIds, tone, keyword, postedAt))
+            record(nextId(), packageName, postedAt, "silent"); return
+        }
         val config = RelayRuleStore.read(this)
         // The listener matched against the rules it saw; only keep a rule that still exists.
         val rule = keyword?.takeIf { it in config.keywords }
         val match = if (summaryAlert != null) config.matchSummary(packageName, summaryAlert, tone, rule)
             else config.match(packageName, conversationIds, tone, rule)
         val category = if (rule != null) RelayMatch.KEYWORD_CATEGORY else tone?.takeIf { config.tone.enabled }?.id
+        // A muted message leaves the summary's alert for the next message in the group.
         if (match == null) { record(nextId(), packageName, postedAt, "filtered", category = category); return }
+        if (pairsWithSummary) groupAlerts.claim(groupKey!!)
         val silence = config.silence.reason(now)
         if (silence != null) { cancelWaiting(silence); record(nextId(), packageName, postedAt, silence, category = category); return }
         if (phoneAwake(config.silence)) {
@@ -386,6 +390,7 @@ class CalendarRelayService : Service() {
 
     internal fun onAlertRemoved(key: String, call: Boolean) {
         filter?.onRemoved(key)
+        groupAlerts.removed(key)
         // A ringing call's re-post may have lost its call category; removing it still ends the call.
         calls.removed(key)
     }
