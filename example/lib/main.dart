@@ -11,6 +11,8 @@ import 'build_flavor.dart';
 import 'demo/demo_controller.dart';
 import 'demo/about_page.dart';
 import 'demo/app_theme.dart';
+import 'demo/app_chrome.dart';
+import 'demo/ios_relay_page.dart';
 import 'demo/relay_panel.dart';
 import 'demo/relay_status.dart';
 import 'demo/status_style.dart';
@@ -179,7 +181,9 @@ class DemoApp extends StatelessWidget {
     debugShowCheckedModeBanner: false,
     theme: airRelayTheme(Brightness.light),
     darkTheme: airRelayTheme(Brightness.dark),
-    home: DemoPage(controller: controller),
+    home: defaultTargetPlatform == TargetPlatform.iOS
+        ? const IosRelayPage()
+        : DemoPage(controller: controller),
   );
 }
 
@@ -305,7 +309,7 @@ class _DemoPageState extends State<DemoPage> with WidgetsBindingObserver {
   }
 
   /// Home carries a dot when alerts may not arrive or setup needs a fix.
-  Widget _homeDestination(BuildContext context) {
+  NavigationDestination _homeDestination(BuildContext context) {
     final level = RelayStatus.fromController(_controller).level;
     final flagged =
         level == StatusLevel.warning || level == StatusLevel.problem;
@@ -1208,15 +1212,7 @@ class _DemoPageState extends State<DemoPage> with WidgetsBindingObserver {
                       onPressed: () => setState(() => _destination = 1),
                     )
                   : null,
-              title: const Row(
-                children: [
-                  AirRelayMark(size: 34),
-                  SizedBox(width: 12),
-                  Flexible(
-                    child: Text('Air Relay', overflow: TextOverflow.ellipsis),
-                  ),
-                ],
-              ),
+              title: const AirRelayTitle(),
               actions: [
                 IconButton(
                   key: const ValueKey('about-air-relay'),
@@ -1337,7 +1333,7 @@ class _DemoPageState extends State<DemoPage> with WidgetsBindingObserver {
                 ),
               ),
             ),
-            bottomNavigationBar: NavigationBar(
+            bottomNavigationBar: AirRelayNavigation(
               selectedIndex: _destination == 0
                   ? 0
                   : _destination == 3
@@ -1347,21 +1343,7 @@ class _DemoPageState extends State<DemoPage> with WidgetsBindingObserver {
                 setState(() => _destination = [0, 3, 1][index]);
                 _controller.setDeviceVisible(index == 2);
               },
-              destinations: [
-                _homeDestination(context),
-                const NavigationDestination(
-                  key: ValueKey('nav-rules'),
-                  icon: Icon(Icons.tune_outlined),
-                  selectedIcon: Icon(Icons.tune),
-                  label: 'Rules',
-                ),
-                const NavigationDestination(
-                  key: ValueKey('nav-device'),
-                  icon: Icon(Icons.watch_outlined),
-                  selectedIcon: Icon(Icons.watch),
-                  label: 'Device',
-                ),
-              ],
+              home: _homeDestination(context),
             ),
           ),
         );

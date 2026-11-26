@@ -35,3 +35,6 @@ migrate_working_dir/
 /android/.cxx/
 /android/local.properties
 /example/android/local.properties
+
+# Local iOS transport build
+/ios/Frameworks/
