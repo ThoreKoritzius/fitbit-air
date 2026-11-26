@@ -30,6 +30,7 @@ class CalendarRelayService : Service() {
     private var engine: FlutterEngine? = null
     private var channel: MethodChannel? = null
     private var filter: CalendarAlertFilter? = null
+    private val groupAlerts = RelayGroupAlerts()
     private val ringingCalls = RelayRingingCalls()
     /** The call the Air is ringing for, while its ring runs. */
     private var activeRing: RelayRingingCalls.Ring? = null
@@ -272,16 +273,26 @@ class CalendarRelayService : Service() {
     }
 
     internal fun onAlert(packageName: String, key: String, postedAt: Long, ongoing: Boolean, summary: Boolean, messageTimestamp: Long?, conversationIds: Set<String>, tone: RelayTone? = null, keyword: RelayKeywordRule? = null,
-                         silent: Boolean = false, alertOnce: Boolean = false) {
+                         silent: Boolean = false, alertOnce: Boolean = false,
+                         group: String? = null, groupAlertBehavior: Int = android.app.Notification.GROUP_ALERT_ALL,
+                         heldForSummary: Boolean = false) {
         if (!ready || stopping) return
         val now = System.currentTimeMillis()
-        if (filter?.accept(packageName, key, postedAt, now, ongoing, summary, messageTimestamp, alertOnce) != true) return
+        val groupKey = group?.let { RelayGroupAlerts.key(packageName, it) }
+        val summaryAlert = if (summary && groupKey != null) groupAlerts.summary(groupKey, groupAlertBehavior, postedAt) else null
+        if (filter?.accept(packageName, key, postedAt, now, ongoing, summary && summaryAlert == null, messageTimestamp, alertOnce,
+                freshInGroup = summaryAlert?.fresh == true) != true) return
         // Android keeps it quiet on the phone, so the Air stays quiet too.
-        if (silent) { record(nextId(), packageName, postedAt, "silent"); return }
+        if (silent) {
+            // Quiet only because its group alerts through the summary: that summary buzzes for it.
+            if (heldForSummary && groupKey != null) groupAlerts.hold(groupKey, conversationIds, postedAt)
+            record(nextId(), packageName, postedAt, "silent"); return
+        }
         val config = RelayRuleStore.read(this)
         // The listener matched against the rules it saw; only keep a rule that still exists.
         val rule = keyword?.takeIf { it in config.keywords }
-        val match = config.match(packageName, conversationIds, tone, rule)
+        val match = if (summaryAlert != null) config.matchSummary(packageName, summaryAlert, tone, rule)
+            else config.match(packageName, conversationIds, tone, rule)
         val category = if (rule != null) RelayMatch.KEYWORD_CATEGORY else tone?.takeIf { config.tone.enabled }?.id
         if (match == null) { record(nextId(), packageName, postedAt, "filtered", category = category); return }
         val silence = config.silence.reason(now)

@@ -76,11 +76,10 @@ class CalendarNotificationListener : NotificationListenerService() {
         }.getOrNull()
         val n = sbn.notification
         val summary = n.flags and Notification.FLAG_GROUP_SUMMARY != 0
-        val silent = RelaySilentPolicy.silent(
-            importance = ranking?.importance ?: android.app.NotificationManager.IMPORTANCE_UNSPECIFIED,
-            groupChild = n.group != null && !summary,
-            groupAlertBehavior = if (Build.VERSION.SDK_INT >= 26) n.groupAlertBehavior else Notification.GROUP_ALERT_ALL,
-        )
+        val importance = ranking?.importance ?: android.app.NotificationManager.IMPORTANCE_UNSPECIFIED
+        val groupAlertBehavior = if (Build.VERSION.SDK_INT >= 26) n.groupAlertBehavior else Notification.GROUP_ALERT_ALL
+        val silent = RelaySilentPolicy.silent(importance, groupChild = n.group != null && !summary, groupAlertBehavior)
+        val heldForSummary = RelaySilentPolicy.heldForSummary(importance, groupChild = n.group != null && !summary, groupAlertBehavior)
         // Opt-in: the text stays local to this call; only the tone and matched rule reach the relay.
         // A silent notification never buzzes, so its text is not read at all.
         val keywordRules = relay.keywordRules
@@ -97,6 +96,7 @@ class CalendarNotificationListener : NotificationListenerService() {
             latestMessageTimestamp(sbn.notification),
             RelayConversations.identities(sbn.packageName, sbn.notification, appLabel(sbn.packageName)), tone, keyword,
             silent = silent, alertOnce = n.flags and Notification.FLAG_ONLY_ALERT_ONCE != 0,
+            group = n.group, groupAlertBehavior = groupAlertBehavior, heldForSummary = heldForSummary,
         )
     }
 

@@ -16,7 +16,14 @@ internal object RelaySilentPolicy {
      * (IMPORTANCE_UNSPECIFIED) counts as alerting.
      */
     fun silent(importance: Int, groupChild: Boolean, groupAlertBehavior: Int): Boolean =
-        importance in NotificationManager.IMPORTANCE_NONE..NotificationManager.IMPORTANCE_LOW ||
+        quietChannel(importance) ||
             // setSilent(true) and apps that let only the group summary alert.
             (groupChild && groupAlertBehavior == Notification.GROUP_ALERT_SUMMARY)
+
+    /** Quiet only because its group alerts through the summary, which then buzzes for it ([RelayGroupAlerts]). */
+    fun heldForSummary(importance: Int, groupChild: Boolean, groupAlertBehavior: Int): Boolean =
+        !quietChannel(importance) && groupChild && groupAlertBehavior == Notification.GROUP_ALERT_SUMMARY
+
+    private fun quietChannel(importance: Int) =
+        importance in NotificationManager.IMPORTANCE_NONE..NotificationManager.IMPORTANCE_LOW
 }
