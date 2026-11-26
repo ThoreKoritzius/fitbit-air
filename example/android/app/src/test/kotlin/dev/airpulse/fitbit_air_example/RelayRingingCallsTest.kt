@@ -183,3 +183,15 @@ class RelayPhoneCallRouterTest {
         assertEquals(listOf(RelayPhoneCallRouter.End(setOf(phone))), router.callState(PhoneCallState.IN_CALL))
     }
 }
+
+class RelayPhoneCallTrackerSimChangeTest {
+    @Test fun `turning on another SIM keeps a call in progress on the first`() {
+        // Review: re-registration used to forget OFFHOOK, so a waiting call then rang.
+        val tracker = RelayPhoneCallTracker()
+        tracker.update(1, android.telephony.TelephonyManager.CALL_STATE_OFFHOOK)
+        tracker.retain(setOf(1, 2))
+        assertEquals(PhoneCallState.IN_CALL, tracker.update(1, android.telephony.TelephonyManager.CALL_STATE_RINGING))
+        tracker.retain(setOf(2))
+        assertEquals(PhoneCallState.IDLE, tracker.current())
+    }
+}
