@@ -83,10 +83,12 @@ class CalendarNotificationListener : NotificationListenerService() {
         // Opt-in: the text stays local to this call; only the tone and matched rule reach the relay.
         // A silent notification never buzzes, so its text is not read at all.
         val keywordRules = relay.keywordRules
-        val text = if (silent || (!relay.toneEnabled && keywordRules.isEmpty())) null
+        // A message held for its group summary may still buzz (RelayGroupAlerts), so its text counts.
+        val quiet = silent && !heldForSummary
+        val text = if (quiet || (!relay.toneEnabled && keywordRules.isEmpty())) null
             else runCatching { latestMessageText(sbn.notification)?.toString() }.getOrNull()
         val keyword = runCatching { RelayKeywordMatcher.firstMatch(keywordRules, text)?.let(keywordRules::get) }.getOrNull()
-        val tone = if (silent || !relay.toneEnabled) null else runCatching {
+        val tone = if (quiet || !relay.toneEnabled) null else runCatching {
             RelayToneClassifier.classify(text,
                 RelayNotificationSignals.from(sbn.notification, ranking, System.currentTimeMillis()),
                 RelayToneLexicons.shared(this))
