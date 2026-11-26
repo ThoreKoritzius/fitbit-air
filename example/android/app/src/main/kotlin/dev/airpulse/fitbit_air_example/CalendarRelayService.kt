@@ -376,7 +376,7 @@ class CalendarRelayService : Service() {
     internal fun onAlertRemoved(key: String, call: Boolean) {
         filter?.onRemoved(key)
         // A ringing call's re-post may have lost its call category; removing it still ends the call.
-        calls.removed(key, call)
+        calls.removed(key)
     }
 
     internal fun testPulse(preset: String? = null, completion: ((RelayWorkerResult) -> Unit)? = null) {
