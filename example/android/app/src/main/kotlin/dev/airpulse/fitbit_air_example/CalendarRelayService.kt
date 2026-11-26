@@ -329,9 +329,13 @@ class CalendarRelayService : Service() {
         handler.postDelayed(end, CALL_REMOVAL_GRACE_MS)
     }
 
+    /** Whether the call behind [key] still rings, even if its notification no longer says "call". */
+    internal fun isCallRinging(key: String): Boolean = ringingCalls.isRinging(key)
+
     internal fun onAlertRemoved(key: String, call: Boolean) {
         filter?.onRemoved(key)
-        if (call) onCallRemoved(key)
+        // A ringing call's re-post may have lost its call category; removing it still ends the call.
+        if (call || ringingCalls.isRinging(key)) onCallRemoved(key)
     }
 
     internal fun testPulse(preset: String? = null, completion: ((RelayWorkerResult) -> Unit)? = null) {

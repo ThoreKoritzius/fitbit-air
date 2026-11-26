@@ -13,6 +13,9 @@ internal class RelayRingingCalls {
 
     fun onEnded(key: String) { active.remove(key) }
 
+    /** Whether the call behind this notification key is still ringing. */
+    fun isRinging(key: String): Boolean = key in active
+
     // A later call may reuse the notification key. It cannot revive a queued alert.
     fun isRinging(ring: Ring): Boolean = active[ring.key] === ring
 }
@@ -73,6 +76,17 @@ internal object RelayCallPolicy {
         fullScreen -> INCOMING
         else -> 0
     }
+
+    /**
+     * Whether a re-post of a call that is ringing still rings. Google's Phone
+     * app (seen on a Pixel with Android 17, phone on silent) moves a ringing
+     * call to a CallStyle notification without the call category about a
+     * second after it appears, while the call keeps ringing. Only a post that
+     * declares the call ongoing (answered) or screened ends the ring there;
+     * anything that is not CallStyle at all means the call is over.
+     */
+    fun stillRinging(callStyle: Boolean, declaredType: Int): Boolean =
+        callStyle && declaredType != ONGOING && declaredType != SCREENING
 
     /**
      * Phone calls arrive from the phone app, which people rarely turn on under

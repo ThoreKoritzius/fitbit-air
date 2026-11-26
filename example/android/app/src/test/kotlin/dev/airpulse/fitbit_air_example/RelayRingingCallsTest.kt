@@ -38,6 +38,20 @@ class RelayRingingCallsTest {
     }
 
 
+    @Test fun `a ringing call re-posted without its call category keeps ringing until answered`() {
+        // Pixel Phone app, phone on silent: CallStyle stays, the category goes.
+        assertTrue(RelayCallPolicy.stillRinging(callStyle = true, declaredType = 0))
+        assertTrue(RelayCallPolicy.stillRinging(callStyle = true, declaredType = 1))
+        assertFalse(RelayCallPolicy.stillRinging(callStyle = true, declaredType = 2))
+        assertFalse(RelayCallPolicy.stillRinging(callStyle = true, declaredType = 3))
+        assertFalse(RelayCallPolicy.stillRinging(callStyle = false, declaredType = 0))
+        val calls = RelayRingingCalls()
+        calls.onIncoming("k")
+        assertTrue(calls.isRinging("k"))
+        calls.onEnded("k")
+        assertFalse(calls.isRinging("k"))
+    }
+
     @Test fun `a ringing call is recognised with or without CallStyle's declared type`() {
         // CallStyle apps declare the type.
         assertEquals(1, RelayCallPolicy.callType(isCall = true, summary = false, declaredType = 1, fullScreen = false))
