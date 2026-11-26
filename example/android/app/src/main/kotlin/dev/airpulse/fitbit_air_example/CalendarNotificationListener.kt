@@ -38,7 +38,11 @@ class CalendarNotificationListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val relay = CalendarRelayService.active
         val callType = callType(sbn.notification)
-        if (sbn.notification.category == Notification.CATEGORY_CALL || sbn.notification.fullScreenIntent != null) runCatching {
+        val ringing = relay?.isCallRinging(sbn.key) == true
+        val callStyle = runCatching { sbn.notification.extras.getString(Notification.EXTRA_TEMPLATE) }.getOrNull()
+            ?.endsWith("\$CallStyle") == true
+        val declaredType = runCatching { sbn.notification.extras.getInt(RelayCallPolicy.EXTRA_CALL_TYPE) }.getOrDefault(0)
+        if (sbn.notification.category == Notification.CATEGORY_CALL || sbn.notification.fullScreenIntent != null || ringing) runCatching {
             // Shape only, never the caller: shows in the diagnostic report whether a call was recognized.
             // Diagnostics only: a failure here must never keep a call from ringing.
             val n = sbn.notification
@@ -47,7 +51,7 @@ class CalendarNotificationListener : NotificationListenerService() {
                 "category" to n.category, "declaredType" to runCatching { n.extras.getInt(RelayCallPolicy.EXTRA_CALL_TYPE) }.getOrDefault(0),
                 "fullScreen" to (n.fullScreenIntent != null), "ongoing" to (n.flags and Notification.FLAG_ONGOING_EVENT != 0),
                 "style" to n.extras.getString(Notification.EXTRA_TEMPLATE)?.substringAfterLast('$'),
-                "recognized" to (callType == RelayCallPolicy.INCOMING),
+                "recognized" to (callType == RelayCallPolicy.INCOMING), "whileRinging" to ringing,
             )
             RelayCallSignals.seen(sbn.key, signal)
             android.util.Log.i("AirRelay", "call-like notification: $signal")
@@ -57,9 +61,14 @@ class CalendarNotificationListener : NotificationListenerService() {
             relay?.onIncomingCall(sbn.packageName, sbn.key, sbn.postTime)
             return
         }
+        // The Phone app may re-post a ringing call without its call category: the call goes on.
+        if (ringing && RelayCallPolicy.stillRinging(callStyle, declaredType)) {
+            relay?.onIncomingCall(sbn.packageName, sbn.key, sbn.postTime)
+            return
+        }
         // A call notification that is no longer ringing means the call was answered or ended.
         // Other notifications never end a call.
-        if (sbn.notification.category == Notification.CATEGORY_CALL) relay?.onCallEnded(sbn.key, "no longer ringing")
+        if (sbn.notification.category == Notification.CATEGORY_CALL || ringing) relay?.onCallEnded(sbn.key, "no longer ringing")
         if (callType == RelayCallPolicy.ONGOING ||
             callType == RelayCallPolicy.SCREENING) return
         runCatching { RelayConversations.observe(sbn.packageName, sbn.notification, sbn.isOngoing, appLabel(sbn.packageName)) }

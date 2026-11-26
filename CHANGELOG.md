@@ -8,6 +8,11 @@
 - **Phones that show calls from a separate in-call app** (Samsung, Xiaomi,
   OPPO and others): Air Relay can now see that app, so its calls count as phone
   calls without selecting anything under Apps.
+- **Calls stopped ringing on the Air after a second:** Google's Phone app
+  (seen with the phone on silent) swaps a ringing call's notification for one
+  without the call category while the call keeps ringing, and the relay took
+  that for the end of the call. The Air now keeps ringing until the call is
+  answered, declined or missed.
 - **Silent notifications no longer buzz** (#39). When Android keeps a
   notification quiet on the phone, the Air stays quiet too: low-importance or
   minimized channels (such as WhatsApp's background sync), notifications
