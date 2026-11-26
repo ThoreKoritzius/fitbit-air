@@ -23,13 +23,11 @@ class RelayGroupAlertsTest {
             val isSilent = RelaySilentPolicy.silent(importance, child, behavior)
             val held = RelaySilentPolicy.heldForSummary(importance, child, behavior)
             val groupKey = group?.let { RelayGroupAlerts.key(packageName, it) }
-            val alert = if (summary && groupKey != null) groups.summary(groupKey, behavior, at) else null
+            val alert = if (summary && groupKey != null) groups.summary(groupKey, behavior, at, alertOnce) else null
             if (!filter.accept(packageName, key, at, at + 100, ongoing = false, summary = summary && alert == null,
                     alertOnce = alertOnce, freshInGroup = alert?.fresh == true)) return
-            if (isSilent) {
-                if (held && groupKey != null) groups.hold(groupKey, chats, at)
-                silent += key; return
-            }
+            val summaryAlerted = held && groupKey != null && groups.hold(groupKey, chats, at)
+            if (isSilent && !summaryAlerted) { silent += key; return }
             val match = if (alert != null) config.matchSummary(packageName, alert) else config.match(packageName, chats)
             match?.let(buzzes::add)
         }
@@ -47,6 +45,31 @@ class RelayGroupAlertsTest {
         relay.post(app, "sum", 1_010, group = "inbox", summary = true, behavior = summaryOnly)
         assertEquals(1, relay.buzzes.size)
         assertEquals(listOf("m1"), relay.silent)
+    }
+
+    @Test fun `Gmail's order, summary a few milliseconds before its message, buzzes once per email`() {
+        // Seen on a Pixel 7 Pro: Gmail updated the summary (behavior ALL) 6 ms before posting the
+        // email (behavior SUMMARY), so a summary waiting for held messages never buzzed.
+        val relay = relay()
+        relay.post(app, "sum", 1_000, group = "account", summary = true)
+        relay.post(app, "mail1", 1_006, group = "account", summary = false, behavior = summaryOnly, chats = setOf("a"))
+        assertEquals(1, relay.buzzes.size)
+        relay.post(app, "sum", 60_000, group = "account", summary = true)
+        relay.post(app, "mail2", 60_006, group = "account", summary = false, behavior = summaryOnly)
+        assertEquals(2, relay.buzzes.size)
+        // A summary update on its own (an email read) and a later unrelated email do not pair up.
+        relay.post(app, "sum", 90_000, group = "account", summary = true)
+        relay.post(app, "mail3", 95_000, group = "account", summary = false, behavior = summaryOnly)
+        assertEquals(2, relay.buzzes.size)
+    }
+
+    @Test fun `a message following its summary keeps its chat's mute`() {
+        val config = RelayRuleConfig(apps = mapOf(app to RelayAppRule(true)),
+            chats = mapOf("muted" to SavedChat(app, "Muted", preset = RelayPreset.MUTE)))
+        val relay = relay(config)
+        relay.post(app, "sum", 1_000, group = "account", summary = true)
+        relay.post(app, "m1", 1_006, group = "account", summary = false, behavior = summaryOnly, chats = setOf("muted"))
+        assertTrue(relay.buzzes.isEmpty())
     }
 
     @Test fun `the summary alerts again for a new message, not for a plain update`() {
