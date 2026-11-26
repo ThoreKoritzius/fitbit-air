@@ -18,17 +18,20 @@ class RelayGroupAlertsTest {
         /** CalendarNotificationListener.onNotificationPosted, then CalendarRelayService.onAlert. */
         fun post(packageName: String, key: String, at: Long, group: String?, summary: Boolean,
                  behavior: Int = Notification.GROUP_ALERT_ALL, chats: Set<String> = emptySet(),
-                 importance: Int = NotificationManager.IMPORTANCE_HIGH, alertOnce: Boolean = false) {
+                 importance: Int = NotificationManager.IMPORTANCE_HIGH, alertOnce: Boolean = false,
+                 keyword: RelayKeywordRule? = null) {
             val child = group != null && !summary
             val isSilent = RelaySilentPolicy.silent(importance, child, behavior)
             val held = RelaySilentPolicy.heldForSummary(importance, child, behavior)
             val groupKey = group?.let { RelayGroupAlerts.key(packageName, it) }
-            val alert = if (summary && groupKey != null) groups.summary(groupKey, behavior, at, alertOnce) else null
+            val alert = if (summary && groupKey != null) groups.summary(groupKey, behavior, at, alertOnce, isSilent) else null
             if (!filter.accept(packageName, key, at, at + 100, ongoing = false, summary = summary && alert == null,
                     alertOnce = alertOnce, freshInGroup = alert?.fresh == true)) return
-            val summaryAlerted = held && groupKey != null && groups.hold(groupKey, chats, at)
+            val summaryAlerted = held && groupKey != null &&
+                groups.hold(groupKey, RelayGroupAlerts.Message(chats, keyword = keyword, postedAt = at))
             if (isSilent && !summaryAlerted) { silent += key; return }
-            val match = if (alert != null) config.matchSummary(packageName, alert) else config.match(packageName, chats)
+            val match = if (alert != null) config.matchSummary(packageName, alert)
+                else config.match(packageName, chats, keyword = keyword?.takeIf { it in config.keywords })
             match?.let(buzzes::add)
         }
     }
@@ -61,6 +64,46 @@ class RelayGroupAlertsTest {
         relay.post(app, "sum", 90_000, group = "account", summary = true)
         relay.post(app, "mail3", 95_000, group = "account", summary = false, behavior = summaryOnly)
         assertEquals(2, relay.buzzes.size)
+    }
+
+    @Test fun `a quiet summary does not let the message after it buzz`() {
+        // Review: a low-importance summary 5 ms before its message was taken as alerting, so the
+        // message buzzed although Android kept both quiet.
+        val relay = relay()
+        relay.post(app, "sum", 1_000, group = "account", summary = true, importance = NotificationManager.IMPORTANCE_LOW)
+        relay.post(app, "m1", 1_005, group = "account", summary = false, behavior = summaryOnly)
+        assertTrue(relay.buzzes.isEmpty())
+    }
+
+    @Test fun `a quiet summary does not buzz for the messages held before it`() {
+        val relay = relay()
+        relay.post(app, "m1", 1_000, group = "account", summary = false, behavior = summaryOnly)
+        relay.post(app, "sum", 1_005, group = "account", summary = true, importance = NotificationManager.IMPORTANCE_LOW)
+        relay.post(app, "sum", 1_500, group = "account", summary = true)
+        assertTrue(relay.buzzes.isEmpty())
+    }
+
+    @Test fun `a message held before its summary keeps its keyword mute`() {
+        // Review: a held message kept its chat but lost its keyword, so a keyword mute was bypassed.
+        val mute = RelayKeywordRule(listOf("newsletter"), RelayPreset.MUTE)
+        val config = RelayRuleConfig(apps = mapOf(app to RelayAppRule(true)), keywords = listOf(mute))
+        val relay = relay(config)
+        relay.post(app, "m1", 1_000, group = "account", summary = false, behavior = summaryOnly, keyword = mute)
+        relay.post(app, "sum", 1_005, group = "account", summary = true)
+        assertTrue(relay.buzzes.isEmpty())
+        // The same sequence without the keyword buzzes.
+        relay.post(app, "m2", 2_000, group = "account", summary = false, behavior = summaryOnly)
+        relay.post(app, "sum", 2_005, group = "account", summary = true)
+        assertEquals(1, relay.buzzes.size)
+    }
+
+    @Test fun `a message following its summary keeps its keyword mute`() {
+        val mute = RelayKeywordRule(listOf("newsletter"), RelayPreset.MUTE)
+        val config = RelayRuleConfig(apps = mapOf(app to RelayAppRule(true)), keywords = listOf(mute))
+        val relay = relay(config)
+        relay.post(app, "sum", 1_000, group = "account", summary = true)
+        relay.post(app, "m1", 1_005, group = "account", summary = false, behavior = summaryOnly, keyword = mute)
+        assertTrue(relay.buzzes.isEmpty())
     }
 
     @Test fun `a message following its summary keeps its chat's mute`() {
