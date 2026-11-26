@@ -90,18 +90,96 @@ class RelayCallSignalsTest {
     }
 }
 
-class RelayPhoneCallStateTest {
+class RelayPhoneCallTrackerTest {
     private val idle = android.telephony.TelephonyManager.CALL_STATE_IDLE
     private val ringing = android.telephony.TelephonyManager.CALL_STATE_RINGING
     private val offhook = android.telephony.TelephonyManager.CALL_STATE_OFFHOOK
 
-    @org.junit.Test fun ringsWhileAnySimRingsAndNoCallIsOngoing() {
-        org.junit.Assert.assertFalse(RelayPhoneCallState.ringing(emptyList()))
-        org.junit.Assert.assertFalse(RelayPhoneCallState.ringing(listOf(idle)))
-        org.junit.Assert.assertTrue(RelayPhoneCallState.ringing(listOf(ringing)))
-        org.junit.Assert.assertTrue(RelayPhoneCallState.ringing(listOf(idle, ringing)))
-        // Answered, or call waiting during a call: the Air stays quiet.
-        org.junit.Assert.assertFalse(RelayPhoneCallState.ringing(listOf(offhook)))
-        org.junit.Assert.assertFalse(RelayPhoneCallState.ringing(listOf(offhook, ringing)))
+    @Test fun `a call rings until answered or over`() {
+        val tracker = RelayPhoneCallTracker()
+        assertEquals(PhoneCallState.IDLE, tracker.update(1, idle))
+        assertEquals(PhoneCallState.RINGING, tracker.update(1, ringing))
+        assertEquals(PhoneCallState.IN_CALL, tracker.update(1, offhook))
+        assertEquals(PhoneCallState.IDLE, tracker.update(1, idle))
+    }
+
+    @Test fun `a call waiting on the same SIM during a call does not ring`() {
+        // Android reports RINGING for a waiting call, replacing OFFHOOK.
+        val tracker = RelayPhoneCallTracker()
+        tracker.update(1, offhook)
+        assertEquals(PhoneCallState.IN_CALL, tracker.update(1, ringing))
+        assertEquals(PhoneCallState.IDLE, tracker.update(1, idle))
+    }
+
+    @Test fun `a call on the other SIM during a call does not ring`() {
+        val tracker = RelayPhoneCallTracker()
+        tracker.update(1, offhook)
+        assertEquals(PhoneCallState.IN_CALL, tracker.update(2, ringing))
+        assertEquals(PhoneCallState.RINGING, tracker.update(1, idle))
+    }
+}
+
+class RelayPhoneCallRouterTest {
+    private val phone = RelayPhoneCalls.KEY
+    private fun router() = RelayPhoneCallRouter().apply { listening = true }
+
+    @Test fun `without the call state a phone app notification rings at once`() {
+        val router = RelayPhoneCallRouter()
+        assertEquals(RelayPhoneCallRouter.Ring("n"), router.notification("n"))
+    }
+
+    @Test fun `call state first - one ring, ended by answering`() {
+        val router = router()
+        assertEquals(listOf(RelayPhoneCallRouter.Ring(phone)), router.callState(PhoneCallState.RINGING))
+        assertEquals(RelayPhoneCallRouter.Skip("n", "via_call_state"), router.notification("n"))
+        assertEquals(listOf(RelayPhoneCallRouter.End(setOf(phone))), router.callState(PhoneCallState.IN_CALL))
+    }
+
+    @Test fun `notification first - the call state takes over within the wait`() {
+        val router = router()
+        assertEquals(RelayPhoneCallRouter.Wait("n"), router.notification("n"))
+        assertNull(router.notification("n")) // re-posted while waiting
+        assertEquals(
+            listOf(RelayPhoneCallRouter.Skip("n", "via_call_state"), RelayPhoneCallRouter.Ring(phone)),
+            router.callState(PhoneCallState.RINGING),
+        )
+        assertEquals(listOf(RelayPhoneCallRouter.End(setOf(phone))), router.callState(PhoneCallState.IDLE))
+    }
+
+    @Test fun `notification rings after the wait and answering still stops it`() {
+        // Regression: the late call state must not start a second ring, and must end the notification's ring.
+        val router = router()
+        router.notification("n")
+        assertEquals(RelayPhoneCallRouter.Ring("n"), router.fallbackDue("n"))
+        assertEquals(emptyList<RelayPhoneCallRouter.Action>(), router.callState(PhoneCallState.RINGING))
+        assertEquals(listOf(RelayPhoneCallRouter.End(setOf(phone, "n"))), router.callState(PhoneCallState.IN_CALL))
+    }
+
+    @Test fun `answering ends a notification ring even if the call state never reported ringing`() {
+        val router = router()
+        router.notification("n")
+        router.fallbackDue("n")
+        assertEquals(listOf(RelayPhoneCallRouter.End(setOf(phone, "n"))), router.callState(PhoneCallState.IN_CALL))
+    }
+
+    @Test fun `a waiting call's notification never rings during a call`() {
+        val router = router()
+        router.callState(PhoneCallState.IN_CALL)
+        assertEquals(RelayPhoneCallRouter.Skip("n", "call_waiting"), router.notification("n"))
+        // Posted just before the call was answered: answering drops it without a ring.
+        val other = router()
+        other.notification("m")
+        assertEquals(
+            listOf(RelayPhoneCallRouter.Skip("m", "call_waiting"), RelayPhoneCallRouter.End(setOf(phone))),
+            other.callState(PhoneCallState.IN_CALL),
+        )
+    }
+
+    @Test fun `a removed notification is forgotten`() {
+        val router = router()
+        router.notification("n")
+        router.fallbackDue("n")
+        router.notificationGone("n")
+        assertEquals(listOf(RelayPhoneCallRouter.End(setOf(phone))), router.callState(PhoneCallState.IN_CALL))
     }
 }
