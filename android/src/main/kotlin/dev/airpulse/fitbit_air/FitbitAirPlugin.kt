@@ -112,7 +112,7 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
     private val gattCallbacks = AirSessionCallbacks({ gatt }) { action -> handler.post { action() } }
     private val sessionCallbacks = AirSessionCallbacks({ endpoint }) { action -> handler.post { action() } }
     private val disposables = CompositeDisposable()
-    private val txQueue = AirTxQueue()
+    private val txQueue = AirTxQueue { SystemClock.elapsedRealtime() }
     private var sessionStarted = false
     private var timeout: Runnable? = null
     private var activeOperation: Operation? = null
@@ -1516,14 +1516,21 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
         if (activeGatt == null) return
         val characteristic = txCharacteristic ?: return
         val packet = txQueue.next(activeGatt) ?: return
-        val accepted = if (Build.VERSION.SDK_INT >= 33) {
-            activeGatt.writeCharacteristic(characteristic, packet, BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE) == BluetoothGatt.GATT_SUCCESS
+        // Android's immediate answer; below API 33 only accepted or not (-1).
+        val status = if (Build.VERSION.SDK_INT >= 33) {
+            activeGatt.writeCharacteristic(characteristic, packet, BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE)
         } else {
             @Suppress("DEPRECATION") characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
             @Suppress("DEPRECATION") characteristic.value = packet
-            @Suppress("DEPRECATION") activeGatt.writeCharacteristic(characteristic)
+            @Suppress("DEPRECATION") if (activeGatt.writeCharacteristic(characteristic)) BluetoothGatt.GATT_SUCCESS else -1
         }
-        if (!accepted) txQueue.declined(activeGatt, packet)
+        if (status == BluetoothGatt.GATT_SUCCESS) return
+        // Declined before anything reached the Air (usually busy with the previous write):
+        // try again shortly, as nothing else may move the queue on. Bounded, so a lasting
+        // error ends in the operation's own timeout as before.
+        val retry = txQueue.declined(activeGatt, packet)
+        android.util.Log.d("FitbitAir", "tx declined status=$status retry=$retry")
+        if (retry) handler.postDelayed({ if (gatt === activeGatt) writeNextPacket(activeGatt) }, AirTxQueue.DECLINED_RETRY_MILLIS)
     }
 
     private fun finishSessionSuccess(coap: CoapEndpoint, value: Map<String, Any>) {
@@ -1713,7 +1720,7 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
         trace.step("rxSource", rxSource != null) { rxSource?.close() }; rxSource = null
         trace.step("txSink", txSink != null) { txSink?.close() }; txSink = null
         txCharacteristic = null
-        txQueue.clear()
+        txQueue.reset()
         trace.step("linkPriority", closingGatt != null && linkBoosted) {
             closingGatt?.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_LOW_POWER)
         }
