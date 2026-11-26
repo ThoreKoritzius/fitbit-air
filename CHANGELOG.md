@@ -1,4 +1,7 @@
-## Unreleased
+## 0.4.2
+
+Air Relay only; the `fitbit_air` package is not republished. Its native
+changes below ship inside Air Relay and go into the next package release.
 
 ### Package
 
@@ -25,11 +28,6 @@
 
 ### Example app
 
-- **Apps that alert through their notification group summary now buzz**
-  (Gmail does this): Android posts each message quietly and alerts for the
-  group summary, and the relay kept the messages quiet but also dropped the
-  summary, so the Air never buzzed. The summary now buzzes once for the new
-  messages behind it, still honoring muted chats and "only saved chats".
 - **Phone calls straight from Android** (#43): turning on Rules → Incoming
   calls also asks for the Phone permission. With calls already on, Home
   asks once (**Let phone calls ring reliably**); after declining, the
@@ -43,6 +41,11 @@
   WhatsApp still come from notifications.
 - **Turning on Incoming calls works on Android 13 and older:** the switch
   showed since 0.4.1 but saving it still required Android 14.
+- **Apps that alert through their notification group summary now buzz**
+  (Gmail does this): Android posts each message quietly and alerts for the
+  group summary, and the relay kept the messages quiet but also dropped the
+  summary, so the Air never buzzed. The summary now buzzes once for the new
+  messages behind it, still honoring muted chats, keyword mutes and "only saved chats".
 
 ## 0.4.1
 
