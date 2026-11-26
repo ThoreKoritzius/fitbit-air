@@ -135,7 +135,7 @@ void main() {
               return null;
             case 'captureConversations':
               conversations['captureRemainingMillis'] =
-                  (call.arguments as Map)['enabled'] == true ? 60000 : 0;
+                  (call.arguments as Map)['enabled'] == true ? 600000 : 0;
               conversations['candidates'] = [
                 {
                   'id': 'abcdef012345',
@@ -1028,8 +1028,8 @@ void main() {
       selected.add('com.whatsapp');
       await mount(tester);
       await tap(tester, 'add-chat');
-      expect(controller.captureRemainingMillis, 60000);
-      expect(find.textContaining('Waiting for new messages'), findsOneWidget);
+      expect(controller.captureRemainingMillis, 600000);
+      expect(find.text('Waiting for new messages… 10:00'), findsOneWidget);
       await tap(tester, 'add-abcdef012345');
       expect(controller.settings.chats.single.label, 'Private Alice');
       expect(

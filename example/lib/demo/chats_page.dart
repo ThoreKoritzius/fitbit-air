@@ -7,6 +7,9 @@ import 'relay_settings.dart';
 import 'settings_section.dart';
 import 'vibration_editor.dart';
 
+/// How long Add a chat waits for new messages; matches the native capture window.
+const kChatListenMillis = 10 * 60 * 1000;
+
 /// The Rules row that opens the Chats page.
 class ChatsRow extends StatelessWidget {
   const ChatsRow({super.key, required this.controller});
@@ -304,7 +307,7 @@ class _OnlySavedTile extends StatelessWidget {
   }
 }
 
-/// Lists chats from the turned-on apps' notifications and keeps listening for a minute.
+/// Lists chats from the turned-on apps' notifications and keeps listening for ten minutes.
 class _AddChatSheet extends StatefulWidget {
   const _AddChatSheet({required this.controller});
   final DemoController controller;
@@ -355,6 +358,8 @@ class _AddChatSheetState extends State<_AddChatSheet> {
           .toList();
       final listening = state.captureRemainingMillis > 0;
       final seconds = (state.captureRemainingMillis / 1000).ceil();
+      final remaining =
+          '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
       final stats = state.captureDiagnostics;
       return Column(
         children: [
@@ -406,7 +411,9 @@ class _AddChatSheetState extends State<_AddChatSheet> {
                               dimension: 18,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                value: state.captureRemainingMillis / 60000,
+                                value:
+                                    state.captureRemainingMillis /
+                                    kChatListenMillis,
                               ),
                             )
                           else
@@ -417,7 +424,7 @@ class _AddChatSheetState extends State<_AddChatSheet> {
                               liveRegion: true,
                               child: Text(
                                 listening
-                                    ? 'Waiting for new messages… ${seconds}s'
+                                    ? 'Waiting for new messages… $remaining'
                                     : 'Stopped waiting for messages.',
                               ),
                             ),

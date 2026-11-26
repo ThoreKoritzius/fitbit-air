@@ -80,7 +80,7 @@ internal object RelayConversations {
         handler.removeCallbacks(expiry)
         handler.removeCallbacks(clearResults)
         window.start(SystemClock.elapsedRealtime())
-        handler.postDelayed(expiry, 60_000)
+        handler.postDelayed(expiry, ConversationCaptureWindow.LISTEN_MS)
         CalendarNotificationListener.captureExisting()
     }
 

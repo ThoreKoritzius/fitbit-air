@@ -46,10 +46,15 @@ internal object RelayConversationIdentity {
 internal class ConversationCaptureWindow {
     private var listeningUntil = 0L
     private var retainingUntil = 0L
-    fun start(now: Long) { listeningUntil = now + 60_000; retainingUntil = listeningUntil + 300_000 }
+    fun start(now: Long) { listeningUntil = now + LISTEN_MS; retainingUntil = listeningUntil + 300_000 }
     fun finish(now: Long) { listeningUntil = 0; retainingUntil = minOf(retainingUntil, now + 300_000) }
     fun clear() { listeningUntil = 0; retainingUntil = 0 }
     fun listening(now: Long) = now < listeningUntil
     fun selectable(now: Long) = now < retainingUntil
     fun remaining(now: Long) = maxOf(0, listeningUntil - now)
+
+    companion object {
+        /** Long enough for someone to be asked to send a message and reply. */
+        const val LISTEN_MS = 10 * 60_000L
+    }
 }

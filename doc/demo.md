@@ -217,7 +217,7 @@ immediately, also while the relay is running.
    chat in that app buzzes. On, only saved chats buzz there; with nobody saved,
    nothing from that app buzzes. Other apps are unaffected.
 3. Tap **Add a chat**. The sheet lists chats from the turned-on apps' current
-   notifications and waits for new ones for a minute. Tap **Add** next to a
+   notifications and waits for new ones for ten minutes. Tap **Add** next to a
    chat; it starts with the app vibration, and tapping it again changes that.
    If someone is missing, ask them to send a message, or leave one of their
    messages unread, then tap **Wait again**. Closing the sheet stops waiting;
