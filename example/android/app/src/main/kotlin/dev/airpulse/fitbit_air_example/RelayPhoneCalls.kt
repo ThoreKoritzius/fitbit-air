@@ -193,6 +193,9 @@ internal class RelayPhoneCallRouter {
         }
     }
 
+    /** A phone app notification rang before the call state could decide (or while it was unavailable). */
+    fun notificationRang(key: String) { notificationRings += key }
+
     /** The notification went away or its call ended some other way. */
     fun notificationGone(key: String) {
         waiting -= key

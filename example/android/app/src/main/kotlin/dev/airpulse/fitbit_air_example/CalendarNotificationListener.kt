@@ -38,7 +38,7 @@ class CalendarNotificationListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val relay = CalendarRelayService.active
         val callType = callType(sbn.notification)
-        val ringing = relay?.isCallRinging(sbn.key) == true
+        val ringing = relay?.isCallTracked(sbn.key) == true
         val callStyle = runCatching { sbn.notification.extras.getString(Notification.EXTRA_TEMPLATE) }.getOrNull()
             ?.endsWith("\$CallStyle") == true
         val declaredType = runCatching { sbn.notification.extras.getInt(RelayCallPolicy.EXTRA_CALL_TYPE) }.getOrDefault(0)
@@ -56,19 +56,15 @@ class CalendarNotificationListener : NotificationListenerService() {
             RelayCallSignals.seen(sbn.key, signal)
             android.util.Log.i("AirRelay", "call-like notification: $signal")
         }
-        if (callType == RelayCallPolicy.INCOMING) {
-            if (relay == null) RelayCallSignals.outcome(sbn.key, "relay_off")
-            relay?.onIncomingCallNotification(sbn.packageName, sbn.key, sbn.postTime)
-            return
+        when (RelayCallPolicy.route(callType, sbn.notification.category == Notification.CATEGORY_CALL, ringing, callStyle, declaredType)) {
+            RelayCallPolicy.Route.INCOMING -> {
+                if (relay == null) RelayCallSignals.outcome(sbn.key, "relay_off")
+                relay?.onIncomingCallNotification(sbn.packageName, sbn.key, sbn.postTime)
+                return
+            }
+            RelayCallPolicy.Route.NOT_RINGING -> relay?.onCallNotRinging(sbn.key, "no longer ringing")
+            RelayCallPolicy.Route.NONE -> Unit
         }
-        // The Phone app may re-post a ringing call without its call category: the call goes on.
-        if (ringing && RelayCallPolicy.stillRinging(callStyle, declaredType)) {
-            relay?.onIncomingCallNotification(sbn.packageName, sbn.key, sbn.postTime)
-            return
-        }
-        // A call notification that is no longer ringing means the call was answered or ended.
-        // Other notifications never end a call.
-        if (sbn.notification.category == Notification.CATEGORY_CALL || ringing) relay?.onCallNotRinging(sbn.key, "no longer ringing")
         if (callType == RelayCallPolicy.ONGOING ||
             callType == RelayCallPolicy.SCREENING) return
         runCatching { RelayConversations.observe(sbn.packageName, sbn.notification, sbn.isOngoing, appLabel(sbn.packageName)) }

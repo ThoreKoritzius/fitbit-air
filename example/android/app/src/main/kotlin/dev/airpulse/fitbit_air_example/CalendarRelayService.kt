@@ -367,8 +367,11 @@ class CalendarRelayService : Service() {
         }
     }
 
-    /** Whether the call behind [key] still rings, even if its notification no longer says "call". */
-    internal fun isCallRinging(key: String): Boolean = ringingCalls.isRinging(key)
+    /**
+     * Whether the relay rings for [key] or is still deciding about it, so a
+     * re-post that no longer says "call" is still recognized as that call.
+     */
+    internal fun isCallTracked(key: String): Boolean = ringingCalls.isRinging(key) || calls.tracks(key)
 
     internal fun onAlertRemoved(key: String, call: Boolean) {
         filter?.onRemoved(key)

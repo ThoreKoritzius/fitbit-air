@@ -51,6 +51,9 @@ internal class RelayCallLifecycle(
         // Re-posted after a removal: the same call goes on.
         pendingEnds.remove(key)?.invoke()
         if (!router.listening || !phoneApp || callbacks.isRinging(key)) {
+            // A phone call ringing before the call state is available still belongs to that call,
+            // so the call state, once allowed, takes it over instead of ringing again.
+            if (phoneApp) router.notificationRang(key)
             callbacks.ringNotification(packageName, key, postedAt); return
         }
         notifications[key] = packageName to postedAt
@@ -63,11 +66,15 @@ internal class RelayCallLifecycle(
         callbacks.end(key, reason)
     }
 
+    /** Whether a ring for [key] is pending: waiting for the call state, or removed and maybe coming back. */
+    fun tracks(key: String): Boolean = key in notifications || key in pendingEnds
+
     /** A notification went away. [call]: it was a call notification. */
     fun removed(key: String, call: Boolean) {
-        // Gone before the call state answered for it; a re-post waits afresh.
-        if (key in fallbacks) forget(key)
-        if (!call && !callbacks.isRinging(key)) return
+        // Gone before the call state answered for it: no ring yet. A re-post within the
+        // grace period (even without its call category) waits afresh.
+        val waiting = fallbacks.remove(key)?.let { it(); router.notificationGone(key); true } ?: false
+        if (!call && !waiting && !callbacks.isRinging(key)) return
         if (key in pendingEnds) return
         pendingEnds[key] = timers.post(REMOVAL_GRACE_MS) {
             pendingEnds.remove(key)

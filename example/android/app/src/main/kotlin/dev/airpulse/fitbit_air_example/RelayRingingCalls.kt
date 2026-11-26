@@ -88,6 +88,22 @@ internal object RelayCallPolicy {
     fun stillRinging(callStyle: Boolean, declaredType: Int): Boolean =
         callStyle && declaredType != ONGOING && declaredType != SCREENING
 
+    enum class Route { INCOMING, NOT_RINGING, NONE }
+
+    /**
+     * What a posted notification means for calls. [tracked]: the relay is
+     * ringing for its key, or still deciding (waiting for the call state or
+     * for a removed notification to come back).
+     */
+    fun route(callType: Int, isCall: Boolean, tracked: Boolean, callStyle: Boolean, declaredType: Int): Route = when {
+        callType == INCOMING -> Route.INCOMING
+        // The Phone app may re-post a ringing call without its call category: the call goes on.
+        tracked && stillRinging(callStyle, declaredType) -> Route.INCOMING
+        // A call notification that no longer rings: answered or ended. Other notifications never end a call.
+        isCall || tracked -> Route.NOT_RINGING
+        else -> Route.NONE
+    }
+
     /**
      * Phone calls arrive from the phone app, which people rarely turn on under
      * Apps, so it is accepted whenever incoming calls are on. Calls in other
