@@ -53,6 +53,67 @@ class RelayCallLifecycleTest {
         return timers to Relay(timers).apply { lifecycle.listening = listening }
     }
 
+    /** What the notification listener does with a post: route it, then hand it to the lifecycle. */
+    private fun Relay.post(key: String, callType: Int, isCall: Boolean, callStyle: Boolean = true, declaredType: Int = callType) {
+        val tracked = key in ringing || lifecycle.tracks(key)
+        when (RelayCallPolicy.route(callType, isCall, tracked, callStyle, declaredType)) {
+            RelayCallPolicy.Route.INCOMING -> lifecycle.incoming("dialer", key, 0, phoneApp = true)
+            RelayCallPolicy.Route.NOT_RINGING -> lifecycle.notRinging(key, "no longer ringing")
+            RelayCallPolicy.Route.NONE -> Unit
+        }
+    }
+
+    private val incoming = RelayCallPolicy.INCOMING
+
+    @Test fun `a re-post without its call category during the wait still rings`() {
+        // Review: the listener only forwarded a category-less re-post for a key already ringing,
+        // so a removal during the wait lost the call when the call state missed it.
+        val (timers, relay) = setup()
+        relay.post("n", callType = incoming, isCall = true)
+        timers.advanceTo(500)
+        relay.lifecycle.removed("n", call = true)
+        timers.advanceTo(600)
+        relay.post("n", callType = 0, isCall = false, declaredType = incoming)
+        timers.advanceTo(2_100)
+        assertEquals(listOf("n"), relay.rings)
+        // Removed for good: the ring ends after the grace period.
+        relay.lifecycle.removed("n", call = false)
+        timers.advanceTo(4_000)
+        assertEquals(listOf("n"), relay.ends)
+        assertFalse(relay.lifecycle.tracks("n"))
+    }
+
+    @Test fun `a call notification removed during the wait and not re-posted never rings`() {
+        val (timers, relay) = setup()
+        relay.post("n", callType = incoming, isCall = true)
+        timers.advanceTo(500)
+        relay.lifecycle.removed("n", call = true)
+        assertTrue(relay.lifecycle.tracks("n"))
+        timers.advanceTo(10_000)
+        assertTrue(relay.rings.isEmpty())
+        assertFalse(relay.lifecycle.tracks("n"))
+    }
+
+    @Test fun `allowing the call state while a call rings takes over that ring`() {
+        // Review: the call state used to start a second ring and answering left the first one going.
+        val (_, relay) = setup(listening = false)
+        relay.post("n", callType = incoming, isCall = true)
+        assertEquals(listOf("n"), relay.rings)
+        relay.lifecycle.listening = true
+        relay.lifecycle.callState(PhoneCallState.RINGING)
+        assertEquals(listOf("n"), relay.rings)
+        relay.lifecycle.callState(PhoneCallState.IN_CALL)
+        assertEquals(listOf("n"), relay.ends)
+        assertTrue(relay.ringing.isEmpty())
+    }
+
+    @Test fun `answered re-post ends the ring through the listener route`() {
+        val (_, relay) = setup(listening = false)
+        relay.post("n", callType = incoming, isCall = true)
+        relay.post("n", callType = RelayCallPolicy.ONGOING, isCall = true)
+        assertEquals(listOf("n"), relay.ends)
+    }
+
     @Test fun `call state first rings once and answering stops it`() {
         val (timers, relay) = setup()
         relay.lifecycle.callState(PhoneCallState.RINGING)

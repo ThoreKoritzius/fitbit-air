@@ -52,6 +52,17 @@ class RelayRingingCallsTest {
         assertFalse(calls.isRinging("k"))
     }
 
+    @Test fun `posts route to ringing, ending or nothing`() {
+        val route = RelayCallPolicy::route
+        assertEquals(RelayCallPolicy.Route.INCOMING, route(1, true, false, true, 1))
+        // Category dropped while the relay still tracks the key: the call goes on.
+        assertEquals(RelayCallPolicy.Route.INCOMING, route(0, false, true, true, 1))
+        assertEquals(RelayCallPolicy.Route.NONE, route(0, false, false, true, 1))
+        assertEquals(RelayCallPolicy.Route.NOT_RINGING, route(2, true, true, true, 2))
+        assertEquals(RelayCallPolicy.Route.NOT_RINGING, route(0, false, true, false, 0))
+        assertEquals(RelayCallPolicy.Route.NONE, route(0, false, false, false, 0))
+    }
+
     @Test fun `a ringing call is recognised with or without CallStyle's declared type`() {
         // CallStyle apps declare the type.
         assertEquals(1, RelayCallPolicy.callType(isCall = true, summary = false, declaredType = 1, fullScreen = false))
