@@ -1,5 +1,13 @@
 ## Unreleased
 
+### Package
+
+- **A rejected tap is no longer reported as verified.** A tap at the wearer's
+  own strength leaves that strength unchanged, so reading it back after the
+  Air rejected the tap still matched and the tap counted as verified. A
+  rejection now fails with `HAPTIC_TAP_FAILED`, and a tap whose reply is lost
+  fails with `HAPTIC_UNCONFIRMED` (never resent) instead of counting as played.
+
 ### Example app
 
 - **Phone calls straight from Android** (#43): turning on Rules → Incoming

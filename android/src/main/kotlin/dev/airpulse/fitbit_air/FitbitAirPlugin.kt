@@ -1342,16 +1342,35 @@ class FitbitAirPlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHa
         disposables.add(readIntensity(coap).flatMap { original ->
             val target = requested ?: original
             val body = if (target == original) AirHapticSettings.tap(original) else AirHapticSettings.write(target)
+            var writeError: Throwable? = null
+            var readError: Throwable? = null
             Single.defer { sent = true; postSettings(coap, body) }
-                .flatMap { readIntensity(coap) }
-                .onErrorResumeNext { error: Throwable ->
-                    // The message may have been applied even without a reply.
-                    readIntensity(coap).onErrorResumeNext { Single.error(error) }
+                .map { AirTapCheck.Write.ACCEPTED }
+                .onErrorReturn { error ->
+                    writeError = error
+                    if (AirCommandFailure.answered(error)) AirTapCheck.Write.REJECTED else AirTapCheck.Write.NO_REPLY
                 }
-                .flatMap { verified ->
-                    if (verified == target) Single.just(original to target)
-                    else writeIntensity(coap, original).retry(2).flatMap {
-                        Single.error<Pair<Int, Int>>(AirCommandFailure.Answered("Tap was not verified; the original strength was restored."))
+                .flatMap { write ->
+                    // Read once more if the first read goes unanswered; -1: the strength stays unknown.
+                    readIntensity(coap).onErrorResumeNext { readIntensity(coap) }
+                        .onErrorReturn { error -> readError = error; -1 }
+                        .map { write to it.takeIf { value -> value >= 0 } }
+                }
+                .flatMap { (write, readBack) ->
+                    when (val outcome = AirTapCheck.after(original, target, write, readBack)) {
+                        AirTapCheck.Verified -> Single.just(original to target)
+                        is AirTapCheck.Failed -> {
+                            val failure: Throwable = when (outcome.reason) {
+                                AirTapCheck.Reason.REJECTED -> AirCommandFailure.Answered("Air rejected the tap.")
+                                AirTapCheck.Reason.NOT_VERIFIED -> AirCommandFailure.Answered("Tap was not verified.")
+                                // Not an answer from the Air: reported as HAPTIC_UNCONFIRMED, never resent.
+                                AirTapCheck.Reason.UNCONFIRMED -> writeError ?: readError
+                                    ?: IllegalStateException("Tap was not confirmed.")
+                            }
+                            val restore: Single<Boolean> = if (outcome.restore) writeIntensity(coap, original).retry(2)
+                                else Single.just(true)
+                            restore.flatMap { Single.error<Pair<Int, Int>>(failure) }
+                        }
                     }
                 }
         }.subscribe({ (original, target) ->
