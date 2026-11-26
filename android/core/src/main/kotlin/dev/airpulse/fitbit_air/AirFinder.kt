@@ -6,14 +6,13 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import io.flutter.plugin.common.EventChannel
 
 /** A separate, read-only GATT client. Never discovers services or writes to the Air. */
 @SuppressLint("MissingPermission")
 internal class AirFinder(
     private val context: Context,
     private val device: BluetoothDevice,
-    private val events: EventChannel.EventSink,
+    private val events: AirEventSink,
 ) {
     private val handler = Handler(Looper.getMainLooper())
     private var gatt: BluetoothGatt? = null
@@ -47,7 +46,7 @@ internal class AirFinder(
                     emit("searching")
                 }
             } catch (_: SecurityException) {
-                events.error("BLUETOOTH_PERMISSION", "Nearby devices permission was revoked.", null)
+                events.error("BLUETOOTH_PERMISSION", "Nearby devices permission was revoked.")
                 close()
                 events.endOfStream()
             } catch (_: IllegalStateException) {

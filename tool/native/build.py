@@ -5,7 +5,7 @@ Builds the core (libgg.so) and JNI bridge (libxp.so) for each Android ABI with
 a pinned NDK. Source paths are normalized, so the output is byte-identical
 across machines and checkouts.
 
-  build.py --ndk NDK                 write android/src/main/jniLibs/<abi>/
+  build.py --ndk NDK                 write android/core/src/main/jniLibs/<abi>/
   build.py --ndk NDK --check         rebuild and compare with the committed files
 """
 import argparse
@@ -31,7 +31,7 @@ LIBRARIES = ["libgg.so", "libxp.so"]
 JNI_FAMILIES = ["GoldenGate_initModulesJNI", "RunLoop", "Stack_create", "CoapEndpoint"]
 
 REPO = Path(__file__).resolve().parents[2]
-JNI_LIBS = REPO / "android/src/main/jniLibs"
+JNI_LIBS = REPO / "android/core/src/main/jniLibs"
 MANIFEST = Path(__file__).resolve().parent / "manifest.json"
 
 

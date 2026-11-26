@@ -2,4 +2,4 @@
 *.jpg binary
 *.jar binary
 
-android/src/main/kotlin/com/fitbit/goldengate/** linguist-vendored
+android/core/src/main/kotlin/com/fitbit/goldengate/** linguist-vendored

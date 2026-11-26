@@ -33,8 +33,8 @@ flutter build apk --release
 flutter build appbundle --release --dart-define=AIR_RELAY_STORE=true   # Play build
 
 # Native JVM unit tests (cd example/android)
-./gradlew :fitbit_air:testDebugUnitTest :app:testDebugUnitTest --console=plain
-./gradlew :fitbit_air:testDebugUnitTest --tests '*AirWarmLinkTest*'    # one class
+./gradlew :fitbit_air_core:testDebugUnitTest :app:testDebugUnitTest --console=plain
+./gradlew :fitbit_air_core:testDebugUnitTest --tests '*AirWarmLinkTest*'    # one class
 
 # On-device integration tests (cd example; phone connected, Air paired)
 flutter test integration_test/demo_smoke_test.dart -d DEVICE_ID        # navigation only
@@ -62,10 +62,14 @@ platform channels:
 Channels: MethodChannel `fitbit_air`, EventChannels `fitbit_air/{heart_rate,
 connection,finder,secure_events,device_events,channel_activity}`.
 
-**Native side (`android/src/main/kotlin/dev/airpulse/fitbit_air/`)** —
-`FitbitAirPlugin.kt` owns everything: one operation at a time (others get
-`BUSY`), plus `AirTransportLease` (process-wide lease so a second Flutter
-engine can't open a competing transport). Secure operations bridge GATT packets
+**Native side** — the Air logic is a plain Android library without Flutter in
+`android/core/` (`FitbitAirClient.kt` owns everything: one operation at a
+time, others get `BUSY`, plus `AirTransportLease`, a process-wide lease so a
+second client or Flutter engine can't open a competing transport). It is built
+standalone as `:fitbit_air_core` from `example/android` (which keeps Flutter
+out of it and runs its tests), and compiled into the plugin through
+`srcDirs`. `android/src/main/kotlin/.../FitbitAirPlugin.kt` is only the
+Flutter adapter: channels and permission requests. Secure operations bridge GATT packets
 into the bundled Golden Gate JNI libs (`libgg.so`/`libxp.so`, loaded by
 `BundledNativeLoader`; Kotlin bindings under `com/fitbit/goldengate/bindings/`
 must match the upstream JNI ABI, guarded by `NativeBindingSignaturesTest`).

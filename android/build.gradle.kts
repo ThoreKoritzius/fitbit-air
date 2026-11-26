@@ -40,18 +40,19 @@ android {
         jvmTarget = JavaVersion.VERSION_17.toString()
     }
 
+    // The Air logic lives in core/, a plain Android library without Flutter
+    // (see core/README.md); the plugin compiles it together with its adapter.
     sourceSets {
         getByName("main") {
-            java.srcDirs("src/main/kotlin")
-        }
-        getByName("test") {
-            java.srcDirs("src/test/kotlin")
+            java.srcDirs("src/main/kotlin", "core/src/main/kotlin")
+            jniLibs.srcDirs("core/src/main/jniLibs")
+            manifest.srcFile("core/src/main/AndroidManifest.xml")
         }
     }
 
     defaultConfig {
         minSdk = 24
-        consumerProguardFiles("consumer-rules.pro")
+        consumerProguardFiles("core/consumer-rules.pro")
     }
 
     testOptions {

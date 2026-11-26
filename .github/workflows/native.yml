@@ -2,9 +2,9 @@ name: Native transport
 
 on:
   push:
-    paths: ['tool/native/**', 'android/src/main/jniLibs/**', '.github/workflows/native.yml']
+    paths: ['tool/native/**', 'android/core/src/main/jniLibs/**', '.github/workflows/native.yml']
   pull_request:
-    paths: ['tool/native/**', 'android/src/main/jniLibs/**', '.github/workflows/native.yml']
+    paths: ['tool/native/**', 'android/core/src/main/jniLibs/**', '.github/workflows/native.yml']
   workflow_dispatch:
 
 permissions:
