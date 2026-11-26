@@ -38,6 +38,10 @@ internal class AirWarmLink(private val context: Context) {
         private set
     @Volatile private var readyAt = 0L
     @Volatile private var notReadySince = SystemClock.elapsedRealtime()
+    /** When the Air last sent anything on this link; 0 before the first packet. */
+    @Volatile private var heardAt = 0L
+    /** When [resubscribe] last ran; 0 if it has not. */
+    private var resubscribedAt = 0L
 
     /** Not ready for [STUCK_MILLIS], although Android should have reconnected. */
     fun isStuck(nowMillis: Long): Boolean = !ready && nowMillis - notReadySince >= STUCK_MILLIS
@@ -75,6 +79,22 @@ internal class AirWarmLink(private val context: Context) {
         return g.setCharacteristicNotification(rx, true)
     }
 
+    /** What the idle link needs, from how long it has heard nothing. See [idle]. */
+    fun idleCheck(nowMillis: Long): Idle =
+        if (!ready) Idle.OK else idle(nowMillis, heardAt, readyAt, resubscribedAt)
+
+    /**
+     * Subscribes to the tracker channel again, writing the subscription to
+     * the Air rather than only re-registering it locally. Main thread, and
+     * only while no command uses the link.
+     */
+    fun resubscribe(): Boolean {
+        val g = gatt ?: return false
+        if (closed || delegate != null) return false
+        resubscribedAt = SystemClock.elapsedRealtime()
+        return subscribe(g)
+    }
+
     /** Tracker traffic within the last [windowMillis], oldest first. */
     fun recentTraffic(nowMillis: Long, windowMillis: Long = HISTORY_MILLIS): List<Pair<Long, Int>> =
         synchronized(recent) { recent.filter { nowMillis - it.first <= windowMillis } }
@@ -95,7 +115,7 @@ internal class AirWarmLink(private val context: Context) {
      * logged by name: the link then stays not ready, and the watchdog replaces
      * it once [isStuck].
      */
-    private fun subscribe(g: BluetoothGatt) {
+    private fun subscribe(g: BluetoothGatt): Boolean {
         val rx = g.getService(TRACKER_SERVICE)?.getCharacteristic(TRACKER_RX)
             ?: return setupFailed("tracker channel not found")
         val cccd = rx.getDescriptor(CCCD) ?: return setupFailed("subscription descriptor not found")
@@ -108,13 +128,17 @@ internal class AirWarmLink(private val context: Context) {
             @Suppress("DEPRECATION")
             g.writeDescriptor(cccd)
         }
-        if (!started) setupFailed("subscription write declined")
+        return started || setupFailed("subscription write declined")
     }
 
-    private fun setupFailed(step: String) { android.util.Log.w("FitbitAir", "warm link setup: $step") }
+    private fun setupFailed(step: String): Boolean {
+        android.util.Log.w("FitbitAir", "warm link setup: $step")
+        return false
+    }
 
     private fun record(size: Int) {
         val now = SystemClock.elapsedRealtime()
+        heardAt = now
         synchronized(recent) {
             recent.addLast(now to size)
             while (recent.isNotEmpty() && now - recent.first().first > HISTORY_MILLIS) recent.removeFirst()
@@ -138,8 +162,8 @@ internal class AirWarmLink(private val context: Context) {
             delegate?.onServicesDiscovered(g, status)
             handler.post {
                 if (closed || g !== gatt || ready) return@post
-                if (status != BluetoothGatt.GATT_SUCCESS) return@post setupFailed("service discovery failed (status $status)")
-                subscribe(g)
+                if (status != BluetoothGatt.GATT_SUCCESS) setupFailed("service discovery failed (status $status)")
+                else subscribe(g)
             }
         }
 
@@ -149,7 +173,8 @@ internal class AirWarmLink(private val context: Context) {
                 if (closed || g !== gatt) return@post
                 if (descriptor.characteristic.uuid != TRACKER_RX) return@post
                 if (status == BluetoothGatt.GATT_SUCCESS) {
-                    readyAt = SystemClock.elapsedRealtime()
+                    // Subscribing again keeps a ready link ready and settled.
+                    if (!ready) readyAt = SystemClock.elapsedRealtime()
                     ready = true
                 } else setupFailed("subscription failed (status $status)")
             }
@@ -194,11 +219,37 @@ internal class AirWarmLink(private val context: Context) {
         }
     }
 
+    enum class Idle { OK, RESUBSCRIBE, REBUILD }
+
     companion object {
         const val SETTLE_MILLIS = 3_000L
         const val STUCK_MILLIS = 120_000L
+        /**
+         * Google Health syncs with the Air every few minutes, and the link
+         * hears that traffic. AirBuzz reports an open link that stayed
+         * connected but heard nothing for over an hour while Google Health
+         * kept syncing, until it subscribed again. Not reproduced here.
+         */
+        const val DEAF_MILLIS = 20 * 60_000L
 
         fun settled(readyAtMillis: Long, nowMillis: Long): Boolean = nowMillis - readyAtMillis >= SETTLE_MILLIS
+
+        /**
+         * A ready link that has heard nothing for [DEAF_MILLIS] (since its last
+         * packet, or since it became ready) subscribes again. If it still
+         * hears nothing for [DEAF_MILLIS] after that, it is replaced: a
+         * connection of its own is the next thing to try. Hearing the Air
+         * again ends the spell. Times are elapsed realtime; 0 means never.
+         */
+        fun idle(nowMillis: Long, heardAtMillis: Long, readyAtMillis: Long, resubscribedAtMillis: Long): Idle {
+            val quietSince = maxOf(heardAtMillis, readyAtMillis)
+            return when {
+                resubscribedAtMillis > quietSince ->
+                    if (nowMillis - resubscribedAtMillis >= DEAF_MILLIS) Idle.REBUILD else Idle.OK
+                nowMillis - quietSince >= DEAF_MILLIS -> Idle.RESUBSCRIBE
+                else -> Idle.OK
+            }
+        }
 
         private const val HISTORY_MILLIS = 2_500L
         private val TRACKER_SERVICE = UUID.fromString("abbaff00-e56a-484c-b832-8b17cf6cbfe8")
