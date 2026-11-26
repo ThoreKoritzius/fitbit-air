@@ -189,15 +189,28 @@ always count; calls from other apps such as WhatsApp count when that app is
 turned on under **Apps**. This works when the calling app posts Android's
 standard incoming-call notification. App and device support can vary.
 
+Some phone makers' call apps don't post a recognizable ringing-call
+notification. Turning on Incoming calls therefore also asks for the Phone
+permission. With calls already on (for example after an update), Home shows
+**Let phone calls ring reliably** until the permission is allowed or declined;
+after declining, the Incoming calls sheet still offers **Allow phone access**. With it, Air Relay follows Android's call state
+for phone (SIM) calls on every SIM: the Air rings while the call rings and stops
+as soon as it is answered or ends. Only the state is read, never the number.
+The Phone app's call notification then waits up to 1.5 s for the call state
+and only rings the Air if the call state did not report the call. Calls from
+other apps still come from their notifications.
+
 A ringing call takes priority over messages in the same queued burst. If a
 call stops ringing before dispatch, its vibration is skipped. Pause and quiet
 hours apply; "Only when the screen is off" does not, because a ringing call
-turns the screen on. Air Relay uses its existing notification access and does
-not request the phone permission, call log, or caller number.
+turns the screen on. Without phone access, Air Relay uses
+its existing notification access only; it never requests the call log or
+caller number.
 
 When a call does not buzz, **Copy diagnostic report** (Home → Activity
 details) includes the Incoming calls settings, the phone maker, Android
-version and default Phone app, and the last few call-like notifications: the
+version and default Phone app, whether the call state is used, and the last
+few call-like notifications: the
 posting app, the notification's shape, and what the relay did with it
 (`calls_off`, `app_not_selected`, `sent_to_air`, `air_verified`, …). Never the
 caller.

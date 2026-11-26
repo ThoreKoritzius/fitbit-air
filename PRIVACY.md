@@ -1,6 +1,6 @@
 # Air Relay privacy policy
 
-Last updated: 2026-11-17
+Last updated: 2026-11-26
 
 Air Relay is an independent Android app that turns selected phone
 notifications into vibrations on your Fitbit Air. It is not affiliated with
@@ -22,6 +22,7 @@ and the `fitbit_air` Flutter package it is built on.
 | Notifications from all apps (Android notification access) | To match notifications against your rules and decide whether to vibrate your Air | Nothing from the content. A short local history keeps the app's package name, time, result, chosen vibration and, if you use **Message tone** or **Keywords**, the category (urgent, negative, neutral or keyword). |
 | Message text (only with **Message tone** on or **Keywords** added) | Checked on the phone, in memory, to choose a vibration | Only the category above; the text is discarded immediately |
 | Chat names in your chat apps (only if you save chats) | To give the chats you pick their own vibration, or to buzz only for them | The chat names and identifiers you save |
+| Phone calls (optional Phone permission, asked when you turn on **Incoming calls**) | To ring your Air while a phone call rings and stop when it is answered or ends | Nothing. Only whether a call is ringing is read; never the number, contact or call log |
 | Nearby devices (Bluetooth) | To connect to your paired Fitbit Air and send vibrations, read its battery, firmware version and signal strength | The last battery reading and firmware version |
 | Notifications (posting) | To show the running relay with pause and stop controls | Nothing |
 

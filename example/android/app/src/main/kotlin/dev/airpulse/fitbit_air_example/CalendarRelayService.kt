@@ -35,6 +35,10 @@ class CalendarRelayService : Service() {
     private var activeRing: RelayRingingCalls.Ring? = null
     /** Removed call notifications that end their call unless re-posted first. */
     private val pendingCallEnds = mutableMapOf<String, Runnable>()
+    /** Phone (SIM) calls from Android's call state, once the Phone permission is allowed. */
+    private val phoneCalls = RelayPhoneCalls(this) { ringing -> onPhoneCallState(ringing) }
+    /** Phone app call notifications waiting briefly for the call state to report the same call. */
+    private val deferredCalls = mutableMapOf<String, Runnable>()
     private var wakeLock: PowerManager.WakeLock? = null
     private var pending = 0
     private var ready = false
@@ -222,6 +226,7 @@ class CalendarRelayService : Service() {
                                 CalendarNotificationListener.existingRingingKeys().forEach { ringingCalls.onIncoming(it) }
                                 ready = true
                                 settingsChanged()
+                                refreshPhoneCalls()
                                 handler.removeCallbacks(watchdog)
                                 saveOutcome("Listening for alerts from ${selectedPackages.size} selected app(s).")
                                 result.success(null)
@@ -281,7 +286,70 @@ class CalendarRelayService : Service() {
         submit(packageName, postedAt, match)
     }
 
-    internal fun onIncomingCall(packageName: String, key: String, postedAt: Long) {
+    /** Starts or stops reading the phone's call state to match the Phone permission. */
+    fun refreshPhoneCalls() {
+        if (ready && !stopping) phoneCalls.refresh() else phoneCalls.stop()
+    }
+
+    val phoneCallsListening: Boolean get() = phoneCalls.listening
+
+    private fun defaultDialer(): String? =
+        runCatching { getSystemService(android.telecom.TelecomManager::class.java).defaultDialerPackage }.getOrNull()
+
+    /** Apps that show phone (SIM) calls: the default phone app and in-call screens such as Samsung's. */
+    private val inCallApps: Set<String> by lazy {
+        runCatching {
+            packageManager.queryIntentServices(Intent(android.telecom.InCallService.SERVICE_INTERFACE), 0)
+                .mapNotNull { it.serviceInfo?.packageName }.toSet()
+        }.getOrDefault(emptySet())
+    }
+
+    private fun showsPhoneCalls(packageName: String): Boolean =
+        packageName == defaultDialer() || packageName in inCallApps
+
+    private fun onPhoneCallState(ringing: Boolean) {
+        val key = RelayPhoneCalls.KEY
+        if (!ringing) { onCallEnded(key, "stopped ringing (call state)"); return }
+        val dialer = defaultDialer() ?: "com.android.phone"
+        RelayCallSignals.seen(key, mapOf(
+            "atMillis" to System.currentTimeMillis(), "package" to dialer, "source" to "call_state", "recognized" to true,
+        ))
+        android.util.Log.i("AirRelay", "phone call ringing (call state)")
+        // The phone app's own notification for this call no longer needs to ring the Air.
+        deferredCalls.keys.toList().forEach { deferred ->
+            deferredCalls.remove(deferred)?.let(handler::removeCallbacks)
+            RelayCallSignals.outcome(deferred, "via_call_state")
+        }
+        if (activeRing != null) { RelayCallSignals.outcome(key, "already_ringing"); return }
+        onIncomingCall(dialer, key, System.currentTimeMillis(), phoneCall = true)
+    }
+
+    /**
+     * A ringing call's notification. With the call state available, a phone
+     * call's notification only rings the Air if the call state has not
+     * reported the call shortly after: then both never ring for one call, and
+     * a call the call state misses still buzzes.
+     */
+    internal fun onIncomingCallNotification(packageName: String, key: String, postedAt: Long) {
+        if (!phoneCalls.listening || !showsPhoneCalls(packageName) || ringingCalls.isRinging(key)) {
+            onIncomingCall(packageName, key, postedAt); return
+        }
+        if (ringingCalls.isRinging(RelayPhoneCalls.KEY)) { RelayCallSignals.outcome(key, "via_call_state"); return }
+        if (key in deferredCalls) return
+        RelayCallSignals.outcome(key, "waiting_for_call_state")
+        val fallback = Runnable {
+            deferredCalls.remove(key)
+            if (ringingCalls.isRinging(RelayPhoneCalls.KEY)) RelayCallSignals.outcome(key, "via_call_state")
+            else {
+                android.util.Log.i("AirRelay", "call state missed a ringing call; using its notification")
+                onIncomingCall(packageName, key, postedAt)
+            }
+        }
+        deferredCalls[key] = fallback
+        handler.postDelayed(fallback, CALL_STATE_WAIT_MS)
+    }
+
+    internal fun onIncomingCall(packageName: String, key: String, postedAt: Long, phoneCall: Boolean = false) {
         if (!ready || stopping) { RelayCallSignals.outcome(key, "relay_not_ready"); return }
         // Re-posted while ringing (the Phone app does this): the same call goes on.
         pendingCallEnds.remove(key)?.let(handler::removeCallbacks)
@@ -290,7 +358,7 @@ class CalendarRelayService : Service() {
         if (postedAt > now || now - postedAt >= 30_000) { RelayCallSignals.outcome(key, "stale"); return }
         val config = RelayRuleStore.read(this)
         val match = config.calls.match() ?: run { RelayCallSignals.outcome(key, "calls_off"); return }
-        if (!RelayCallPolicy.accepts(packageName, selectedPackages, isPhoneApp(packageName))) {
+        if (!RelayCallPolicy.accepts(packageName, selectedPackages, phoneCall || isPhoneApp(packageName))) {
             android.util.Log.i("AirRelay", "call from $packageName ignored: app not selected")
             RelayCallSignals.outcome(key, "app_not_selected")
             record(nextId(), packageName, postedAt, "filtered")
@@ -310,6 +378,7 @@ class CalendarRelayService : Service() {
 
     internal fun onCallEnded(key: String, reason: String) {
         pendingCallEnds.remove(key)?.let(handler::removeCallbacks)
+        deferredCalls.remove(key)?.let(handler::removeCallbacks)
         ringingCalls.onEnded(key)
         // Answered, declined or missed: stop ringing on the wrist right away.
         if (activeRing?.key == key) {
@@ -334,6 +403,8 @@ class CalendarRelayService : Service() {
 
     internal fun onAlertRemoved(key: String, call: Boolean) {
         filter?.onRemoved(key)
+        // Gone before the call state answered for it: the call is already over.
+        deferredCalls.remove(key)?.let(handler::removeCallbacks)
         // A ringing call's re-post may have lost its call category; removing it still ends the call.
         if (call || ringingCalls.isRinging(key)) onCallRemoved(key)
     }
@@ -540,6 +611,9 @@ class CalendarRelayService : Service() {
     override fun onDestroy() {
         ready = false
         stopping = true
+        phoneCalls.stop()
+        deferredCalls.values.forEach(handler::removeCallbacks)
+        deferredCalls.clear()
         val endedAt = System.currentTimeMillis()
         inFlight.forEach { (id, source) ->
             RelayHistory.add(this, RelayActivity(id, source.first, "interrupted", endedAt,
@@ -586,6 +660,8 @@ class CalendarRelayService : Service() {
         private const val RING_MAX_MS = 45_000
         /** How long a removed call notification may take to come back while ringing. */
         private const val CALL_REMOVAL_GRACE_MS = 1_500L
+        /** How long a phone call's notification waits for the call state, which usually comes first. */
+        private const val CALL_STATE_WAIT_MS = 1_500L
         private var starting = false
         private var cancelStart = false
         val isRunning: Boolean get() = active != null || starting
@@ -656,6 +732,9 @@ class CalendarRelayService : Service() {
             "phone" to mapOf(
                 "manufacturer" to Build.MANUFACTURER, "sdk" to Build.VERSION.SDK_INT,
                 "defaultDialer" to runCatching { context.getSystemService(android.telecom.TelecomManager::class.java).defaultDialerPackage }.getOrNull(),
+                "callStateAccess" to RelayPhoneCalls.granted(context),
+                "callStateDeclined" to context.getSharedPreferences("relay_permissions", MODE_PRIVATE).getBoolean("phoneDeclined", false),
+                "callStateListening" to (active?.phoneCallsListening == true),
             ),
             "callSignals" to RelayCallSignals.snapshot(),
         )

@@ -393,6 +393,21 @@ class RelayPanel extends StatelessWidget {
               child: const Text('Open'),
             ),
           ),
+        if (state.suggestPhoneAccess)
+          ListTile(
+            key: const ValueKey('phone-access-suggestion'),
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.phone_in_talk_outlined),
+            title: const Text('Let phone calls ring reliably'),
+            subtitle: const Text(
+              'Allow phone access so Air Relay sees calls ringing directly. Only whether a call rings, never the number.',
+            ),
+            trailing: TextButton(
+              key: const ValueKey('allow-phone-access'),
+              onPressed: () => perform(state.allowPhoneCalls),
+              child: const Text('Allow'),
+            ),
+          ),
         if (state.showFirmwareNotice) _firmwareNotice(context, state),
         const SizedBox(height: 16),
         const Divider(),

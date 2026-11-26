@@ -89,3 +89,19 @@ class RelayCallSignalsTest {
         org.junit.Assert.assertEquals("recognized", snapshot[1]["outcome"])
     }
 }
+
+class RelayPhoneCallStateTest {
+    private val idle = android.telephony.TelephonyManager.CALL_STATE_IDLE
+    private val ringing = android.telephony.TelephonyManager.CALL_STATE_RINGING
+    private val offhook = android.telephony.TelephonyManager.CALL_STATE_OFFHOOK
+
+    @org.junit.Test fun ringsWhileAnySimRingsAndNoCallIsOngoing() {
+        org.junit.Assert.assertFalse(RelayPhoneCallState.ringing(emptyList()))
+        org.junit.Assert.assertFalse(RelayPhoneCallState.ringing(listOf(idle)))
+        org.junit.Assert.assertTrue(RelayPhoneCallState.ringing(listOf(ringing)))
+        org.junit.Assert.assertTrue(RelayPhoneCallState.ringing(listOf(idle, ringing)))
+        // Answered, or call waiting during a call: the Air stays quiet.
+        org.junit.Assert.assertFalse(RelayPhoneCallState.ringing(listOf(offhook)))
+        org.junit.Assert.assertFalse(RelayPhoneCallState.ringing(listOf(offhook, ringing)))
+    }
+}

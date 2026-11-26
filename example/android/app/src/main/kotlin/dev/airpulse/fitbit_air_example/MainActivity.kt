@@ -89,6 +89,24 @@ class MainActivity : FlutterActivity() {
                             }
                             result.success(null)
                         }
+                        "allowPhoneCalls" -> {
+                            // Asked before and "Don't ask again": only App info can still allow it.
+                            val prefs = getSharedPreferences("relay_permissions", MODE_PRIVATE)
+                            when {
+                                RelayPhoneCalls.granted(this) -> Unit
+                                prefs.getBoolean("phoneAsked", false) &&
+                                    !shouldShowRequestPermissionRationale(Manifest.permission.READ_PHONE_STATE) -> {
+                                    if (call.argument<Boolean>("openSettings") != false) {
+                                        startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:$packageName")))
+                                    }
+                                }
+                                else -> {
+                                    prefs.edit().putBoolean("phoneAsked", true).apply()
+                                    requestPermissions(arrayOf(Manifest.permission.READ_PHONE_STATE), 903)
+                                }
+                            }
+                            result.success(null)
+                        }
                         "notificationControlsSettings" -> {
                             val settingsIntent = if (Build.VERSION.SDK_INT >= 26) {
                                 Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
@@ -169,7 +187,6 @@ class MainActivity : FlutterActivity() {
                         }
                         "setCallAlertsEnabled" -> {
                             val enabled = requireNotNull(call.argument<Boolean>("enabled"))
-                            require(!enabled || Build.VERSION.SDK_INT >= 34)
                             RelayRuleStore.update(this) { it.copy(calls = it.calls.copy(enabled = enabled)) }
                             result.success(null)
                         }
@@ -304,5 +321,20 @@ class MainActivity : FlutterActivity() {
 
     private companion object {
         const val REPOSITORY_URL = "https://github.com/ThoreKoritzius/fitbit-air"
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // The Phone permission may have changed in App info.
+        CalendarRelayService.active?.refreshPhoneCalls()
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != 903) return
+        // Declined: stop suggesting it on Home; the Incoming calls sheet still offers it.
+        val granted = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
+        getSharedPreferences("relay_permissions", MODE_PRIVATE).edit().putBoolean("phoneDeclined", !granted).apply()
+        CalendarRelayService.active?.refreshPhoneCalls()
     }
 }
