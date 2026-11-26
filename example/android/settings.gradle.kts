@@ -24,3 +24,8 @@ plugins {
 }
 
 include(":app")
+
+// The Flutter-free Fitbit Air core (android/core), built on its own to keep
+// Flutter out of it and to run its tests once.
+include(":fitbit_air_core")
+project(":fitbit_air_core").projectDir = file("../../android/core")

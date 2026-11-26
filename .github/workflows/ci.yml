@@ -28,7 +28,7 @@ jobs:
         working-directory: example
       - run: flutter build apk --release
         working-directory: example
-      - run: ./gradlew :app:testReleaseUnitTest :fitbit_air:testDebugUnitTest --console=plain
+      - run: ./gradlew :app:testReleaseUnitTest :fitbit_air_core:testDebugUnitTest --console=plain
         working-directory: example/android
       - uses: actions/upload-artifact@v4
         with:
